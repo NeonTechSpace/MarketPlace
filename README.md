@@ -2,11 +2,10 @@
 
 Canonical source repository for NeonConductor marketplace entries.
 
-This repository is in Phase 18B. Approved skill and MCP package files are
-vendored into this repository, and generated catalogs are prepared for GitHub
-Pages. Upstream repository URL, pinned commit, source path, content hash, and
-license evidence are audit records. NeonConductor installs from the vendored
-marketplace copy, not from arbitrary upstream repositories.
+This repository is in Phase 18B.
+Approved skill and MCP package files are vendored into this repository, and generated catalogs are prepared for GitHub Pages.
+Upstream repository URL, pinned commit, source path, content hash, file manifest, and license evidence are audit records.
+NeonConductor installs from the vendored marketplace copy, not from arbitrary upstream repositories.
 
 ## Package Families
 
@@ -14,9 +13,7 @@ marketplace copy, not from arbitrary upstream repositories.
 - `mcps/<slug>/<manifest>`
 - `modes/` remains schema-supported but empty until NeonConductor first alpha is finished
 
-Each package directory owns a `marketplace.v1.json` file with the package
-metadata consumed by NeonConductor plus marketplace-only license and provenance
-evidence used by this repository's validation tooling.
+Each package directory owns a `marketplace.v1.json` file with the package metadata consumed by NeonConductor plus marketplace-only license and provenance evidence used by this repository's validation tooling.
 
 ## Validation
 
@@ -27,9 +24,7 @@ pnpm install
 pnpm run check
 ```
 
-The check command runs type checking, tests, metadata validation, generated
-catalog freshness checks, deterministic vendored-content checks, and Pages
-catalog output checks.
+The check command runs type checking, tests, metadata validation, generated catalog freshness checks, deterministic vendored-content checks, and Pages catalog output checks.
 
 ## Generated Catalogs
 
@@ -44,9 +39,12 @@ Pages publication prepares:
 
 The mode catalog is intentionally valid and empty during Phase 18B.
 
+Generated package records include `distribution.files`, a deterministic per-package manifest of installable files with package-relative path, SHA-256, and byte size.
+The manifest lets NeonConductor fetch only the selected package's commit-pinned raw files, verify each file, and then recompute the aggregate package hash before install.
+Authors do not maintain this list by hand.
+
 ## Publication Status
 
-Phase 18B enables GitHub Pages catalog publication. GitHub Releases and GitHub
-Packages are not used for package artifacts in this slice. Package installation
-should verify the catalog commit, package path, vendored content SHA-256, and
-size before trusting local package files.
+Phase 18B enables GitHub Pages catalog publication.
+GitHub Releases and GitHub Packages are not used for package artifacts in this slice.
+Package installation should verify the catalog commit, package path, per-file manifest entries, vendored content SHA-256, and size before trusting local package files.

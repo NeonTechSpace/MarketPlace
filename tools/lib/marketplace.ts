@@ -37,12 +37,19 @@ export interface MarketplacePackageUpstreamSource {
     relativePath: string;
 }
 
+export interface MarketplacePackageFileManifestEntry {
+    relativePath: string;
+    sha256: string;
+    sizeBytes: number;
+}
+
 export interface MarketplacePackageDistribution {
     repositoryUrl: string;
     commitSha: string;
     relativePath: string;
     contentSha256: string;
     sizeBytes: number;
+    files?: MarketplacePackageFileManifestEntry[];
 }
 
 export interface MarketplacePackageCompatibility {
@@ -119,20 +126,21 @@ export interface MarketplaceGeneratedCatalog {
 
 export interface MarketplaceValidationResult {
     packages: AuthoredMarketplacePackage[];
+    generatedPackages: MarketplacePackageMetadata[];
     catalog: MarketplaceGeneratedCatalog;
 }
 
 export interface PackageContentDigest {
     sha256: string;
     sizeBytes: number;
-    files: string[];
+    files: MarketplacePackageFileManifestEntry[];
 }
 
 export interface PackageArtifactResult {
     packageIdentity: string;
     sha256: string;
     sizeBytes: number;
-    files: string[];
+    files: MarketplacePackageFileManifestEntry[];
 }
 
 export interface ResolvedCliArgs {
@@ -456,6 +464,19 @@ function withMarketplaceCommit(
     } as MarketplacePackageMetadata;
 }
 
+function withDistributionFiles(
+    metadata: MarketplacePackageMetadata,
+    files: MarketplacePackageFileManifestEntry[]
+): MarketplacePackageMetadata {
+    return {
+        ...metadata,
+        distribution: {
+            ...metadata.distribution,
+            files,
+        },
+    } as MarketplacePackageMetadata;
+}
+
 export function buildGeneratedCatalog(
     packages: MarketplacePackageMetadata[],
     options: { marketplaceCommitSha?: string; kind?: PackageKind } = {}
@@ -586,10 +607,16 @@ export async function hashVendoredPackageDirectory(packageRoot: string): Promise
     }
     const digest = createHash('sha256');
     let sizeBytes = 0;
+    const fileManifest: MarketplacePackageFileManifestEntry[] = [];
     for (const file of files) {
         const data = await readFile(path.join(packageRoot, file));
         const fileSha256 = createHash('sha256').update(data).digest('hex');
         sizeBytes += data.length;
+        fileManifest.push({
+            relativePath: file,
+            sha256: fileSha256,
+            sizeBytes: data.length,
+        });
         digest.update(file, 'utf8');
         digest.update('\0');
         digest.update(String(data.length), 'utf8');
@@ -597,10 +624,13 @@ export async function hashVendoredPackageDirectory(packageRoot: string): Promise
         digest.update(fileSha256, 'utf8');
         digest.update('\n');
     }
-    return { sha256: digest.digest('hex'), sizeBytes, files };
+    return { sha256: digest.digest('hex'), sizeBytes, files: fileManifest };
 }
 
-async function validatePackagePaths(rootDir: string, pkg: AuthoredMarketplacePackage): Promise<void> {
+async function validatePackagePaths(
+    rootDir: string,
+    pkg: AuthoredMarketplacePackage
+): Promise<PackageContentDigest> {
     const relativePackageRoot = normalizePathSeparators(path.relative(rootDir, pkg.packageRoot));
     const expectedFolder = expectedKindFolder(pkg.metadata.kind);
     if (!relativePackageRoot.startsWith(`${expectedFolder}/`)) {
@@ -643,6 +673,7 @@ async function validatePackagePaths(rootDir: string, pkg: AuthoredMarketplacePac
     if (contentDigest.sizeBytes !== pkg.metadata.distribution.sizeBytes) {
         throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": vendored package content size does not match.`);
     }
+    return contentDigest;
 }
 
 export async function loadAuthoredPackages(rootDir: string): Promise<AuthoredMarketplacePackage[]> {
@@ -663,6 +694,7 @@ export async function loadAuthoredPackages(rootDir: string): Promise<AuthoredMar
 export async function validateMarketplace(rootDir: string): Promise<MarketplaceValidationResult> {
     const packages = await loadAuthoredPackages(rootDir);
     const identities = new Set<string>();
+    const digestsByIdentity = new Map<string, PackageContentDigest>();
     for (const pkg of packages) {
         const identity = packageIdentity(pkg.metadata);
         if (identities.has(identity)) {
@@ -670,10 +702,17 @@ export async function validateMarketplace(rootDir: string): Promise<MarketplaceV
         }
         identities.add(identity);
         validateLicensePolicy(pkg);
-        await validatePackagePaths(rootDir, pkg);
+        digestsByIdentity.set(identity, await validatePackagePaths(rootDir, pkg));
     }
-    const catalog = buildGeneratedCatalog(packages.map((pkg) => pkg.metadata));
-    return { packages, catalog };
+    const generatedPackages = packages.map((pkg) => {
+        const digest = digestsByIdentity.get(packageIdentity(pkg.metadata));
+        if (!digest) {
+            throw new Error(`Invalid packages: missing content digest for "${packageIdentity(pkg.metadata)}".`);
+        }
+        return withDistributionFiles(pkg.metadata, digest.files);
+    });
+    const catalog = buildGeneratedCatalog(generatedPackages);
+    return { packages, generatedPackages, catalog };
 }
 
 function generatedCatalogs(packages: MarketplacePackageMetadata[], marketplaceCommitSha?: string): Map<string, MarketplaceGeneratedCatalog> {
@@ -687,19 +726,19 @@ function generatedCatalogs(packages: MarketplacePackageMetadata[], marketplaceCo
 }
 
 export async function writeGeneratedCatalog(rootDir: string): Promise<MarketplaceGeneratedCatalog> {
-    const { packages, catalog } = await validateMarketplace(rootDir);
+    const { generatedPackages, catalog } = await validateMarketplace(rootDir);
     const outputRoot = path.join(rootDir, 'generated');
     await mkdir(outputRoot, { recursive: true });
-    for (const [fileName, generatedCatalog] of generatedCatalogs(packages.map((pkg) => pkg.metadata))) {
+    for (const [fileName, generatedCatalog] of generatedCatalogs(generatedPackages)) {
         await writeFile(path.join(outputRoot, fileName), `${JSON.stringify(generatedCatalog, null, 4)}\n`, 'utf8');
     }
     return catalog;
 }
 
 export async function checkGeneratedCatalog(rootDir: string): Promise<void> {
-    const { packages } = await validateMarketplace(rootDir);
+    const { generatedPackages } = await validateMarketplace(rootDir);
     const outputRoot = path.join(rootDir, 'generated');
-    for (const [fileName, generatedCatalog] of generatedCatalogs(packages.map((pkg) => pkg.metadata))) {
+    for (const [fileName, generatedCatalog] of generatedCatalogs(generatedPackages)) {
         const actual = await readFile(path.join(outputRoot, fileName), 'utf8');
         const expected = `${JSON.stringify(generatedCatalog, null, 4)}\n`;
         if (actual !== expected) {
@@ -714,14 +753,14 @@ export async function preparePagesOutput(input: {
     marketplaceCommitSha: string;
     check?: boolean;
 }): Promise<void> {
-    const { packages } = await validateMarketplace(input.rootDir);
+    const { generatedPackages } = await validateMarketplace(input.rootDir);
     const outputRoot = path.resolve(input.rootDir, input.outputDir);
     const catalogRoot = path.join(outputRoot, 'catalog', 'v1');
     const outputs = new Map([
-        ['catalog.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha })],
-        ['skills.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'skill' })],
-        ['mcps.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mcp' })],
-        ['modes.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mode' })],
+        ['catalog.json', buildGeneratedCatalog(generatedPackages, { marketplaceCommitSha: input.marketplaceCommitSha })],
+        ['skills.json', buildGeneratedCatalog(generatedPackages, { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'skill' })],
+        ['mcps.json', buildGeneratedCatalog(generatedPackages, { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mcp' })],
+        ['modes.json', buildGeneratedCatalog(generatedPackages, { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mode' })],
     ]);
     if (input.check) {
         for (const [fileName, catalog] of outputs) {

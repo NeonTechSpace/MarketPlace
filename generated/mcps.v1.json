@@ -29,7 +29,19 @@
                 "commitSha": "0000000000000000000000000000000000000000",
                 "relativePath": "mcps/github",
                 "contentSha256": "68430b633147282696000768f82f528a448f4e8f064fb1c000ba009baffad9ef",
-                "sizeBytes": 2422
+                "sizeBytes": 2422,
+                "files": [
+                    {
+                        "relativePath": "LICENSE",
+                        "sha256": "9e48ecfa18e2b15169746a3c97beda4d1d6c6796097038498ca434ca7e0ccd44",
+                        "sizeBytes": 1063
+                    },
+                    {
+                        "relativePath": "server.json",
+                        "sha256": "38d2395945342d544b57055e46d5faaae01f51cb4304bbd5182ec60489c33372",
+                        "sizeBytes": 1359
+                    }
+                ]
             },
             "compatibility": {
                 "neonVersionRange": ">=0.0.1 <1.0.0",

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,7 @@ import {
     writeGeneratedCatalog,
     type LicenseReviewStatus,
     type PackageKind,
+    type MarketplacePackageFileManifestEntry,
 } from './lib/marketplace.js';
 
 interface FixturePackageInput {
@@ -129,6 +131,27 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
     return packageRoot;
 }
 
+function recomputePackageDigestFromManifest(files: MarketplacePackageFileManifestEntry[]): {
+    sha256: string;
+    sizeBytes: number;
+} {
+    const digest = createHash('sha256');
+    let sizeBytes = 0;
+    for (const file of files) {
+        sizeBytes += file.sizeBytes;
+        digest.update(file.relativePath, 'utf8');
+        digest.update('\0');
+        digest.update(String(file.sizeBytes), 'utf8');
+        digest.update('\0');
+        digest.update(file.sha256, 'utf8');
+        digest.update('\n');
+    }
+    return {
+        sha256: digest.digest('hex'),
+        sizeBytes,
+    };
+}
+
 describe('marketplace validation', () => {
     it('accepts an empty marketplace and writes deterministic generated catalogs', async () => {
         await withTempMarketplace(async (rootDir) => {
@@ -156,7 +179,39 @@ describe('marketplace validation', () => {
 
             const result = await validateMarketplace(rootDir);
             expect(result.packages.map((pkg) => pkg.metadata.kind)).toEqual(['mcp', 'mode', 'skill']);
-            expect(buildGeneratedCatalog(result.packages.map((pkg) => pkg.metadata)).packages).toHaveLength(3);
+            expect(buildGeneratedCatalog(result.generatedPackages).packages).toHaveLength(3);
+            expect(result.packages[0]?.metadata.distribution.files).toBeUndefined();
+            expect(result.generatedPackages).toHaveLength(3);
+        });
+    });
+
+    it('generates deterministic package file manifests for selected-file installs', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
+            await writeFile(path.join(rootDir, 'skills', 'repo-review', 'references.md'), 'reference\n', 'utf8');
+            const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
+            const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+                metadata: { distribution: { contentSha256: string; sizeBytes: number } };
+            };
+            const digest = await hashVendoredPackageDirectory(path.join(rootDir, 'skills', 'repo-review'));
+            authored.metadata.distribution.contentSha256 = digest.sha256;
+            authored.metadata.distribution.sizeBytes = digest.sizeBytes;
+            await writeFile(metadataPath, `${JSON.stringify(authored, null, 4)}\n`, 'utf8');
+
+            const result = await validateMarketplace(rootDir);
+            const packageEntry = result.catalog.packages[0];
+            expect(packageEntry?.kind).toBe('skill');
+            const files = packageEntry?.distribution.files ?? [];
+            expect(files.map((file) => file.relativePath)).toEqual(['LICENSE', 'references.md', 'SKILL.md']);
+            expect(files.every((file) => /^[a-f0-9]{64}$/u.test(file.sha256))).toBe(true);
+            expect(files.every((file) => file.sizeBytes > 0)).toBe(true);
+            expect(files.some((file) => file.relativePath === 'marketplace.v1.json')).toBe(false);
+
+            const recomputed = recomputePackageDigestFromManifest(files);
+            expect(recomputed).toEqual({
+                sha256: packageEntry?.distribution.contentSha256,
+                sizeBytes: packageEntry?.distribution.sizeBytes,
+            });
         });
     });
 
@@ -171,7 +226,16 @@ describe('marketplace validation', () => {
 
             const skills = JSON.parse(await readFile(path.join(rootDir, '.pages', 'catalog', 'v1', 'skills.json'), 'utf8')) as {
                 source: { commitSha: string };
-                packages: Array<{ kind: string; distribution: { commitSha: string } }>;
+                packages: Array<{
+                    kind: string;
+                    distribution: { commitSha: string; files: MarketplacePackageFileManifestEntry[] };
+                }>;
+            };
+            const catalog = JSON.parse(await readFile(path.join(rootDir, '.pages', 'catalog', 'v1', 'catalog.json'), 'utf8')) as {
+                packages: Array<{
+                    kind: string;
+                    distribution: { files: MarketplacePackageFileManifestEntry[] };
+                }>;
             };
             const modes = JSON.parse(await readFile(path.join(rootDir, '.pages', 'catalog', 'v1', 'modes.json'), 'utf8')) as {
                 packages: unknown[];
@@ -180,6 +244,9 @@ describe('marketplace validation', () => {
             expect(skills.packages).toHaveLength(1);
             expect(skills.packages[0]?.kind).toBe('skill');
             expect(skills.packages[0]?.distribution.commitSha).toBe(sourceCommit);
+            expect(skills.packages[0]?.distribution.files).toEqual(
+                catalog.packages.find((pkg) => pkg.kind === 'skill')?.distribution.files
+            );
             expect(modes.packages).toEqual([]);
         });
     });

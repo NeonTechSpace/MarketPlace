@@ -1,0 +1,31 @@
+---
+engines:
+  metric:
+    config:
+      languages:
+        - "typescript"
+        - "javascript"
+  duplication:
+    config:
+      languages:
+        - "typescript"
+        - "javascript"
+  markdownlint:
+    exclude_paths:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "modes/README.md"
+  eslint-9:
+    exclude_paths:
+      - "generated/**"
+      - ".marketplace-pages/**"
+  opengrep:
+    exclude_paths:
+      - "generated/**"
+      - ".marketplace-pages/**"
+
+exclude_paths:
+  - "generated/**"
+  - ".marketplace-pages/**"
+  - "node_modules/**"
+  - "pnpm-lock.yaml"

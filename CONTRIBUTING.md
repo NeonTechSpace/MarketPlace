@@ -42,29 +42,30 @@ Every package must include:
 - marketplace package version
 - vendored package content SHA-256
 - vendored package byte size
+- generated file manifest in the published catalog
 - SPDX license expression
 - license evidence path
 - license evidence SHA-256
 - review status
 - required notices
 
-A commit hash proves provenance, not permission. If the pinned commit has no
-license, the package cannot be published. Ask upstream for a licensed commit,
-record explicit written permission, or reimplement the idea without copying
-protected content.
+Do not hand-author `distribution.files` in `marketplace.v1.json`.
+The generator adds the per-file manifest to published catalogs from the vendored package contents so NeonConductor can fetch only selected commit-pinned raw files and verify each file before install.
 
-Permissive SPDX/OSI licenses such as `MIT`, `Apache-2.0`, `BSD-2-Clause`,
-`BSD-3-Clause`, `ISC`, and `0BSD` can pass automatically when evidence matches.
+A commit hash proves provenance, not permission.
+If the pinned commit has no license, the package cannot be published.
+Ask upstream for a licensed commit, record explicit written permission, or reimplement the idea without copying protected content.
+
+Permissive SPDX/OSI licenses such as `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, and `0BSD` can pass automatically when evidence matches.
 Other licenses require maintainer review before publication.
 
 ## Skills And MCPs
 
-Skills and MCPs are eligible for package submissions during Phase 18B when their
-vendored files and license evidence validate.
+Skills and MCPs are eligible for package submissions during Phase 18B when their vendored files and license evidence validate.
 
-`skills.sh`, GitHub starred repositories, and GitHub search may be used as
-candidate discovery sources. They are not trust authorities. A package is
-accepted only after source, license, path, and hash validation passes.
+`skills.sh`, GitHub starred repositories, and GitHub search may be used as candidate discovery sources.
+They are not trust authorities.
+A package is accepted only after source, license, path, and hash validation passes.
 
 ## Modes
 
@@ -88,8 +89,8 @@ Run:
 pnpm run check
 ```
 
-Do not add GitHub Releases or GitHub Packages for package artifacts in Phase
-18B. GitHub Pages is used for generated catalog publication.
+Do not add GitHub Releases or GitHub Packages for package artifacts in Phase 18B.
+GitHub Pages is used for generated catalog publication.
 
 ## AI Assistance Disclosure
 
@@ -100,5 +101,5 @@ If AI was used, disclose where it was used:
 - code or metadata edits
 - validation/debugging
 
-Do not submit unreviewed AI output. The contributor is responsible for the final
-content, package metadata, license evidence, and validation results.
+Do not submit unreviewed AI output.
+The contributor is responsible for the final content, package metadata, license evidence, and validation results.

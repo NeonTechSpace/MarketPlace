@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "description": "Marketplace purpose, package families, generated catalog behavior, and publication boundaries."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "description": "Contributor rules for package submissions, license evidence, provenance, validation, and publication limits."
+    },
+    {
+      "path": "tools/lib/marketplace.ts",
+      "description": "Source of truth for marketplace package parsing, validation, deterministic hashing, generated catalogs, and Pages output."
+    },
+    {
+      "path": "tools/marketplace.test.ts",
+      "description": "Focused validation coverage for marketplace package shape, license policy, file manifests, generated catalogs, and deterministic package hashes."
+    },
+    {
+      "path": "tools/candidate-intake.md",
+      "description": "Current candidate intake notes and future upstream update pipeline constraints."
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "triggerOnUpdates": true,
+  "ignorePatterns": "generated/**\n.marketplace-pages/**\nnode_modules/**\npnpm-lock.yaml",
+  "summarySection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "instructions": "This repository is the curated NeonConductor marketplace source. Reviews should prioritize package provenance, license evidence, deterministic catalog generation, selected-file install safety, and clean TypeScript tooling.",
+  "rules": [
+    {
+      "id": "marketplace-no-runtime-upstream-install",
+      "rule": "Do not make NeonConductor install from upstream source repositories. Upstream repository URL, commit, and path are provenance only; installable content comes from the vendored MarketPlace-NC package at the catalog commit.",
+      "scope": ["tools/**", "skills/**", "mcps/**", "README.md", "CONTRIBUTING.md"],
+      "severity": "high"
+    },
+    {
+      "id": "marketplace-file-manifest-safety",
+      "rule": "Generated file manifests must remain deterministic, package-relative, path-safe, and hash-verifiable. Do not allow absolute paths, parent traversal, backslashes, generated metadata files, or hand-authored distribution.files entries.",
+      "scope": ["tools/**", "generated/**", "skills/**", "mcps/**"],
+      "severity": "high"
+    },
+    {
+      "id": "marketplace-license-provenance",
+      "rule": "Package changes must preserve source repository URL, pinned source commit, source-relative path, SPDX license expression, license evidence path, license evidence SHA-256, review status, and required notices.",
+      "scope": ["skills/**", "mcps/**", "tools/**"],
+      "severity": "high"
+    },
+    {
+      "id": "marketplace-no-publishing-surface",
+      "rule": "Do not add GitHub Releases, GitHub Packages, real mode packages, deployment environments beyond Pages catalogs, or automatic upstream update behavior unless a later phase explicitly asks for it.",
+      "scope": [".github/**", "package.json", "README.md", "CONTRIBUTING.md"],
+      "severity": "medium"
+    }
+  ],
+  "disabledRules": []
+}
