@@ -1,0 +1,30 @@
+{
+    "name": "neonconductor-marketplace",
+    "private": true,
+    "version": "0.0.0",
+    "description": "Canonical source and validation tooling for NeonConductor marketplace packages.",
+    "type": "module",
+    "packageManager": "pnpm@11.1.2",
+    "engines": {
+        "node": "24.14.1",
+        "pnpm": "11.1.2"
+    },
+    "scripts": {
+        "test": "vitest run --fileParallelism=false",
+        "typecheck": "tsc --noEmit",
+        "validate": "tsx tools/validate-marketplace.ts",
+        "generate": "tsx tools/generate-catalogs.ts",
+        "package": "tsx tools/package-assets.ts",
+        "check": "pnpm run typecheck && pnpm run test && pnpm run validate && pnpm run generate -- --check && pnpm run package -- --check"
+    },
+    "dependencies": {
+        "semver": "^7.8.0"
+    },
+    "devDependencies": {
+        "@types/node": "^25.7.0",
+        "@types/semver": "^7.7.1",
+        "tsx": "^4.21.0",
+        "typescript": "~5.9.3",
+        "vitest": "^4.1.6"
+    }
+}

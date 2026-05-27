@@ -1,0 +1,5 @@
+node_modules/
+.marketplace-artifacts/
+coverage/
+dist/
+*.tsbuildinfo
