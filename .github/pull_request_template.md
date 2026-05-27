@@ -19,6 +19,8 @@ Package family:
 - [ ] Source repository URL is recorded.
 - [ ] Pinned source commit is recorded.
 - [ ] Source-relative path is recorded.
+- [ ] Vendored marketplace path is recorded.
+- [ ] Vendored content SHA-256 and size are recorded.
 - [ ] SPDX license expression is recorded.
 - [ ] License evidence path and SHA-256 are recorded.
 - [ ] Required notices are recorded.

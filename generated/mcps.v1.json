@@ -1,0 +1,46 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "source": {
+        "repositoryUrl": "https://github.com/NeonTechSpace/MarketPlace-NC",
+        "commitSha": "0000000000000000000000000000000000000000"
+    },
+    "packages": [
+        {
+            "kind": "mcp",
+            "slug": "github",
+            "version": "1.0.0",
+            "name": "GitHub MCP Server",
+            "summary": "Official GitHub MCP server manifest for repository, issue, pull request, and workflow access.",
+            "description": "Vendored from github/github-mcp-server as an approved first seed MCP entry. The upstream source commit and license evidence are recorded for audit, while NeonConductor installs from this vendored marketplace copy.",
+            "tags": [
+                "github",
+                "mcp",
+                "repositories",
+                "pull-requests"
+            ],
+            "source": {
+                "repositoryUrl": "https://github.com/github/github-mcp-server",
+                "commitSha": "f80ca8555bd5cd89e4b0850505fb6f392413b5a2",
+                "relativePath": "server.json"
+            },
+            "distribution": {
+                "repositoryUrl": "https://github.com/NeonTechSpace/MarketPlace-NC",
+                "commitSha": "0000000000000000000000000000000000000000",
+                "relativePath": "mcps/github",
+                "contentSha256": "68430b633147282696000768f82f528a448f4e8f064fb1c000ba009baffad9ef",
+                "sizeBytes": 2422
+            },
+            "compatibility": {
+                "neonVersionRange": ">=0.0.1 <1.0.0",
+                "requiredCapabilities": [
+                    "mcp"
+                ]
+            },
+            "mcp": {
+                "manifestFile": "mcps/github/server.json",
+                "serverLabel": "github"
+            }
+        }
+    ]
+}

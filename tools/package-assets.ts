@@ -6,8 +6,8 @@ packageMarketplace(rootDir, { check })
     .then((results) => {
         process.stdout.write(
             check
-                ? `Package artifact check passed (${results.length} packages).\n`
-                : `Package artifacts written (${results.length} packages).\n`
+                ? `Vendored package content check passed (${results.length} packages).\n`
+                : `Vendored package content summarized (${results.length} packages).\n`
         );
     })
     .catch((error: unknown) => {

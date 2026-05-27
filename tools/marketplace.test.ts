@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,9 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
     buildGeneratedCatalog,
-    buildPackageArchive,
     checkGeneratedCatalog,
+    deterministicSourceCommit,
+    hashVendoredPackageDirectory,
+    marketplaceRepositoryUrl,
     packageMarketplace,
+    preparePagesOutput,
     resolveRootFromArgs,
     sha256File,
     validateMarketplace,
@@ -23,25 +25,24 @@ interface FixturePackageInput {
     version?: string;
     reviewStatus?: LicenseReviewStatus;
     spdxExpression?: string;
-    sourceRelativePath?: string;
+    upstreamRepositoryUrl?: string;
+    upstreamRelativePath?: string;
     entryRelativePath?: string;
     writeEntry?: boolean;
-    artifactSha256?: string;
-    artifactSizeBytes?: number;
-    sourceRepositoryUrl?: string;
+    contentSha256?: string;
+    sizeBytes?: number;
 }
 
 async function withTempMarketplace<T>(fn: (rootDir: string) => Promise<T>): Promise<T> {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'neon-marketplace-'));
     try {
+        await mkdir(path.join(rootDir, 'skills'), { recursive: true });
+        await mkdir(path.join(rootDir, 'modes'), { recursive: true });
+        await mkdir(path.join(rootDir, 'mcps'), { recursive: true });
         return await fn(rootDir);
     } finally {
         await rm(rootDir, { recursive: true, force: true });
     }
-}
-
-function sha256Buffer(buffer: Buffer): string {
-    return createHash('sha256').update(buffer).digest('hex');
 }
 
 function kindRoot(kind: PackageKind): string {
@@ -77,7 +78,8 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
     const licenseRelativePath = `${kindRoot(input.kind)}/${input.slug}/LICENSE`;
     const licensePath = path.join(rootDir, licenseRelativePath);
     await writeFile(licensePath, 'MIT License\n\nCopyright Neon\n', 'utf8');
-    const artifactSha256 = input.artifactSha256 ?? sha256Buffer(await buildPackageArchive(packageRoot));
+    const distributionRelativePath = `${kindRoot(input.kind)}/${input.slug}`;
+    const contentDigest = await hashVendoredPackageDirectory(packageRoot);
     const metadata = {
         kind: input.kind,
         slug: input.slug,
@@ -88,13 +90,16 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
             .join(' '),
         summary: `Fixture ${input.kind} package.`,
         source: {
-            repositoryUrl: input.sourceRepositoryUrl ?? 'https://github.com/NeonTechSpace/MarketPlace',
-            relativePath: input.sourceRelativePath ?? `${kindRoot(input.kind)}/${input.slug}`,
+            repositoryUrl: input.upstreamRepositoryUrl ?? 'https://github.com/example/source',
+            commitSha: '0123456789abcdef0123456789abcdef01234567',
+            relativePath: input.upstreamRelativePath ?? distributionRelativePath,
         },
-        artifact: {
-            url: `https://neontechspace.github.io/MarketPlace/artifacts/${kindRoot(input.kind)}/${input.slug}-${version}.tgz`,
-            sha256: artifactSha256,
-            ...(input.artifactSizeBytes !== undefined ? { sizeBytes: input.artifactSizeBytes } : {}),
+        distribution: {
+            repositoryUrl: marketplaceRepositoryUrl,
+            commitSha: deterministicSourceCommit,
+            relativePath: distributionRelativePath,
+            contentSha256: input.contentSha256 ?? contentDigest.sha256,
+            sizeBytes: input.sizeBytes ?? contentDigest.sizeBytes,
         },
         compatibility: {
             neonVersionRange: '>=0.0.1 <1.0.0',
@@ -110,7 +115,6 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
         schemaVersion: 1,
         metadata,
         compliance: {
-            sourceCommitSha: '0123456789abcdef0123456789abcdef01234567',
             license: {
                 spdxExpression: input.spdxExpression ?? 'MIT',
                 evidencePath: licenseRelativePath,
@@ -126,15 +130,21 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
 }
 
 describe('marketplace validation', () => {
-    it('accepts an empty marketplace and writes the deterministic generated catalog', async () => {
+    it('accepts an empty marketplace and writes deterministic generated catalogs', async () => {
         await withTempMarketplace(async (rootDir) => {
             await writeGeneratedCatalog(rootDir);
             await checkGeneratedCatalog(rootDir);
 
             const catalog = JSON.parse(await readFile(path.join(rootDir, 'generated', 'catalog.v1.json'), 'utf8')) as {
+                source: { repositoryUrl: string };
                 packages: unknown[];
             };
+            const modesCatalog = JSON.parse(await readFile(path.join(rootDir, 'generated', 'modes.v1.json'), 'utf8')) as {
+                packages: unknown[];
+            };
+            expect(catalog.source.repositoryUrl).toBe(marketplaceRepositoryUrl);
             expect(catalog.packages).toEqual([]);
+            expect(modesCatalog.packages).toEqual([]);
         });
     });
 
@@ -150,14 +160,34 @@ describe('marketplace validation', () => {
         });
     });
 
+    it('writes split Pages catalogs with the requested marketplace commit', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
+            await addPackage(rootDir, { kind: 'mcp', slug: 'local-files' });
+            const sourceCommit = 'abcdef0123456789abcdef0123456789abcdef01';
+
+            await preparePagesOutput({ rootDir, outputDir: '.pages', marketplaceCommitSha: sourceCommit });
+            await preparePagesOutput({ rootDir, outputDir: '.pages', marketplaceCommitSha: sourceCommit, check: true });
+
+            const skills = JSON.parse(await readFile(path.join(rootDir, '.pages', 'catalog', 'v1', 'skills.json'), 'utf8')) as {
+                source: { commitSha: string };
+                packages: Array<{ kind: string; distribution: { commitSha: string } }>;
+            };
+            const modes = JSON.parse(await readFile(path.join(rootDir, '.pages', 'catalog', 'v1', 'modes.json'), 'utf8')) as {
+                packages: unknown[];
+            };
+            expect(skills.source.commitSha).toBe(sourceCommit);
+            expect(skills.packages).toHaveLength(1);
+            expect(skills.packages[0]?.kind).toBe('skill');
+            expect(skills.packages[0]?.distribution.commitSha).toBe(sourceCommit);
+            expect(modes.packages).toEqual([]);
+        });
+    });
+
     it('rejects duplicate package identities', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
-            await addPackage(rootDir, {
-                kind: 'skill',
-                slug: 'repo-review-copy',
-                sourceRelativePath: 'skills/repo-review-copy',
-            });
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review-copy' });
             const copyMetadataPath = path.join(rootDir, 'skills', 'repo-review-copy', 'marketplace.v1.json');
             const copy = JSON.parse(await readFile(copyMetadataPath, 'utf8')) as { metadata: { slug: string } };
             copy.metadata.slug = 'repo-review';
@@ -180,26 +210,26 @@ describe('marketplace validation', () => {
         });
     });
 
-    it('rejects unsafe paths and non-HTTPS URLs', async () => {
+    it('rejects unsafe paths and non-HTTPS upstream URLs', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, {
                 kind: 'skill',
                 slug: 'repo-review',
-                sourceRepositoryUrl: 'http://example.com/repo',
+                upstreamRepositoryUrl: 'http://example.com/repo',
             });
 
             await expect(validateMarketplace(rootDir)).rejects.toThrow(/HTTPS/u);
         });
     });
 
-    it('rejects invalid artifact SHA and compatibility ranges', async () => {
+    it('rejects invalid content SHA and compatibility ranges', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
             const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
             const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
-                metadata: { artifact: { sha256: string }; compatibility: { neonVersionRange: string } };
+                metadata: { distribution: { contentSha256: string }; compatibility: { neonVersionRange: string } };
             };
-            authored.metadata.artifact.sha256 = 'abc';
+            authored.metadata.distribution.contentSha256 = 'abc';
             authored.metadata.compatibility.neonVersionRange = 'not a range';
             await writeFile(metadataPath, `${JSON.stringify(authored, null, 4)}\n`, 'utf8');
 
@@ -209,11 +239,7 @@ describe('marketplace validation', () => {
 
     it('rejects no-license and manual-review package status', async () => {
         await withTempMarketplace(async (rootDir) => {
-            await addPackage(rootDir, {
-                kind: 'skill',
-                slug: 'repo-review',
-                reviewStatus: 'blocked_no_license',
-            });
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review', reviewStatus: 'blocked_no_license' });
 
             await expect(validateMarketplace(rootDir)).rejects.toThrow(/blocked_no_license/u);
         });
@@ -231,17 +257,13 @@ describe('marketplace validation', () => {
 
     it('rejects approved status for licenses that need manual review', async () => {
         await withTempMarketplace(async (rootDir) => {
-            await addPackage(rootDir, {
-                kind: 'skill',
-                slug: 'repo-review',
-                spdxExpression: 'GPL-3.0-only',
-            });
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review', spdxExpression: 'GPL-3.0-only' });
 
             await expect(validateMarketplace(rootDir)).rejects.toThrow(/requires manual review/u);
         });
     });
 
-    it('checks deterministic package hashes against metadata', async () => {
+    it('checks deterministic vendored package hashes against metadata', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
 
@@ -252,33 +274,36 @@ describe('marketplace validation', () => {
         });
     });
 
-    it('rejects mismatched package artifact size metadata', async () => {
+    it('rejects modified vendored content without updated hash metadata', async () => {
         await withTempMarketplace(async (rootDir) => {
-            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review', artifactSizeBytes: 1 });
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
+            await writeFile(path.join(rootDir, 'skills', 'repo-review', 'extra.md'), 'changed\n', 'utf8');
 
-            await expect(packageMarketplace(rootDir, { check: true })).rejects.toThrow(/artifact size/u);
+            await expect(validateMarketplace(rootDir)).rejects.toThrow(/content SHA-256/u);
         });
     });
 
-    it('rejects archive paths that cannot fit the deterministic tar writer', async () => {
+    it('rejects mismatched vendored package size metadata', async () => {
         await withTempMarketplace(async (rootDir) => {
-            const packageRoot = path.join(rootDir, 'skills', 'repo-review');
-            await mkdir(packageRoot, { recursive: true });
-            await writeFile(path.join(packageRoot, 'a'.repeat(93)), 'too long for the tar name field\n', 'utf8');
+            await addPackage(rootDir, { kind: 'skill', slug: 'repo-review', sizeBytes: 1 });
 
-            await expect(buildPackageArchive(packageRoot)).rejects.toThrow(/100 bytes/u);
+            await expect(validateMarketplace(rootDir)).rejects.toThrow(/content size/u);
         });
     });
 
     it('parses known CLI arguments strictly while accepting pnpm separators', () => {
         const cwd = path.resolve('marketplace-root');
 
-        expect(resolveRootFromArgs(['--', '--check'], cwd)).toEqual({ rootDir: cwd, check: true });
-        expect(resolveRootFromArgs(['--root', 'fixtures', '--check'], cwd)).toEqual({
+        expect(resolveRootFromArgs(['--', '--check'], cwd)).toMatchObject({ rootDir: cwd, check: true });
+        expect(resolveRootFromArgs(['--root', 'fixtures', '--check'], cwd)).toMatchObject({
             rootDir: path.resolve(cwd, 'fixtures'),
             check: true,
         });
+        expect(resolveRootFromArgs(['--output', 'public', '--source-commit', 'abcdef0'], cwd)).toMatchObject({
+            outputDir: 'public',
+            sourceCommit: 'abcdef0',
+        });
         expect(() => resolveRootFromArgs(['--wat'], cwd)).toThrow(/Unknown arguments/u);
-        expect(() => resolveRootFromArgs(['--root', '--check'], cwd)).toThrow(/Expected a path/u);
+        expect(() => resolveRootFromArgs(['--root', '--check'], cwd)).toThrow(/Expected a value/u);
     });
 });

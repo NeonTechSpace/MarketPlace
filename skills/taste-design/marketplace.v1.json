@@ -1,0 +1,49 @@
+{
+    "schemaVersion": 1,
+    "metadata": {
+        "kind": "skill",
+        "slug": "taste-design",
+        "version": "1.0.0",
+        "name": "Taste Design",
+        "summary": "Guides design critique and UI taste checks for agent-authored interfaces.",
+        "description": "Vendored from google-labs-code/stitch-skills as an approved first seed skill. The upstream source commit and license evidence are recorded for audit, while NeonConductor installs from this vendored marketplace copy.",
+        "tags": [
+            "design",
+            "ui",
+            "review"
+        ],
+        "source": {
+            "repositoryUrl": "https://github.com/google-labs-code/stitch-skills",
+            "commitSha": "53f15d81da854039aae10e8af19ad389c3997653",
+            "relativePath": "plugins/stitch-utilities/skills/taste-design"
+        },
+        "distribution": {
+            "repositoryUrl": "https://github.com/NeonTechSpace/MarketPlace-NC",
+            "commitSha": "0000000000000000000000000000000000000000",
+            "relativePath": "skills/taste-design",
+            "contentSha256": "b909b86ab5913c6f0f961981f69eeedc38b15cfa1c6cacd55c3008dabf9de4c9",
+            "sizeBytes": 36488
+        },
+        "compatibility": {
+            "neonVersionRange": ">=0.0.1 <1.0.0",
+            "requiredCapabilities": [
+                "skills"
+            ]
+        },
+        "skill": {
+            "entryFile": "skills/taste-design/SKILL.md"
+        }
+    },
+    "compliance": {
+        "license": {
+            "spdxExpression": "Apache-2.0",
+            "evidencePath": "skills/taste-design/LICENSE",
+            "evidenceSha256": "b4133a55232c0996713349891dc55469d46a16ec027c033c9e4108b2149abb42",
+            "reviewStatus": "approved",
+            "notices": [
+                "Vendored from google-labs-code/stitch-skills at commit 53f15d81da854039aae10e8af19ad389c3997653.",
+                "Apache-2.0 license evidence is copied into this package directory."
+            ]
+        }
+    }
+}

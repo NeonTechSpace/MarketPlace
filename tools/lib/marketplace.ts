@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { gzipSync } from 'node:zlib';
 
 import { validRange } from 'semver';
 
 export const marketplaceCatalogSchemaVersion = 1 as const;
-export const marketplaceRepositoryUrl = 'https://github.com/NeonTechSpace/MarketPlace';
+export const marketplaceRepositoryUrl = 'https://github.com/NeonTechSpace/MarketPlace-NC';
 export const deterministicGeneratedAt = '1970-01-01T00:00:00.000Z';
 export const deterministicSourceCommit = '0000000000000000000000000000000000000000';
 
@@ -32,15 +31,18 @@ export interface MarketplaceCatalogSource {
     commitSha: string;
 }
 
-export interface MarketplacePackageSource {
+export interface MarketplacePackageUpstreamSource {
     repositoryUrl: string;
+    commitSha: string;
     relativePath: string;
 }
 
-export interface MarketplacePackageArtifact {
-    url: string;
-    sha256: string;
-    sizeBytes?: number;
+export interface MarketplacePackageDistribution {
+    repositoryUrl: string;
+    commitSha: string;
+    relativePath: string;
+    contentSha256: string;
+    sizeBytes: number;
 }
 
 export interface MarketplacePackageCompatibility {
@@ -56,8 +58,8 @@ export interface MarketplacePackageBaseMetadata {
     summary: string;
     description?: string;
     tags?: string[];
-    source: MarketplacePackageSource;
-    artifact: MarketplacePackageArtifact;
+    source: MarketplacePackageUpstreamSource;
+    distribution: MarketplacePackageDistribution;
     compatibility: MarketplacePackageCompatibility;
 }
 
@@ -97,7 +99,6 @@ export interface MarketplacePackageLicenseCompliance {
 }
 
 export interface MarketplacePackageCompliance {
-    sourceCommitSha: string;
     license: MarketplacePackageLicenseCompliance;
 }
 
@@ -121,11 +122,24 @@ export interface MarketplaceValidationResult {
     catalog: MarketplaceGeneratedCatalog;
 }
 
-export interface PackageArtifactResult {
-    packageIdentity: string;
-    fileName: string;
+export interface PackageContentDigest {
     sha256: string;
     sizeBytes: number;
+    files: string[];
+}
+
+export interface PackageArtifactResult {
+    packageIdentity: string;
+    sha256: string;
+    sizeBytes: number;
+    files: string[];
+}
+
+export interface ResolvedCliArgs {
+    rootDir: string;
+    check: boolean;
+    sourceCommit: string;
+    outputDir: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -271,34 +285,33 @@ function readRelativePath(value: unknown, field: string): string {
     return relativePath;
 }
 
-function readOptionalPositiveInteger(value: unknown, field: string): number | undefined {
+function readPositiveInteger(value: unknown, field: string): number {
     const number = readOptionalNumber(value, field);
-    if (number === undefined) {
-        return undefined;
-    }
-    if (!Number.isInteger(number) || number <= 0) {
+    if (number === undefined || !Number.isInteger(number) || number <= 0) {
         throw new Error(`Invalid "${field}": expected positive integer.`);
     }
     return number;
 }
 
-function readPackageSource(value: unknown, field: string): MarketplacePackageSource {
+function readUpstreamSource(value: unknown, field: string): MarketplacePackageUpstreamSource {
     const source = readObject(value, field);
-    assertAllowedKeys(source, new Set(['repositoryUrl', 'relativePath']), field);
+    assertAllowedKeys(source, new Set(['repositoryUrl', 'commitSha', 'relativePath']), field);
     return {
         repositoryUrl: readHttpsUrl(source.repositoryUrl, `${field}.repositoryUrl`),
+        commitSha: readCommitSha(source.commitSha, `${field}.commitSha`),
         relativePath: readRelativePath(source.relativePath, `${field}.relativePath`),
     };
 }
 
-function readArtifact(value: unknown, field: string): MarketplacePackageArtifact {
+function readDistribution(value: unknown, field: string): MarketplacePackageDistribution {
     const source = readObject(value, field);
-    assertAllowedKeys(source, new Set(['url', 'sha256', 'sizeBytes']), field);
-    const sizeBytes = readOptionalPositiveInteger(source.sizeBytes, `${field}.sizeBytes`);
+    assertAllowedKeys(source, new Set(['repositoryUrl', 'commitSha', 'relativePath', 'contentSha256', 'sizeBytes']), field);
     return {
-        url: readHttpsUrl(source.url, `${field}.url`),
-        sha256: readSha256(source.sha256, `${field}.sha256`),
-        ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+        repositoryUrl: readHttpsUrl(source.repositoryUrl, `${field}.repositoryUrl`),
+        commitSha: readCommitSha(source.commitSha, `${field}.commitSha`),
+        relativePath: readRelativePath(source.relativePath, `${field}.relativePath`),
+        contentSha256: readSha256(source.contentSha256, `${field}.contentSha256`),
+        sizeBytes: readPositiveInteger(source.sizeBytes, `${field}.sizeBytes`),
     };
 }
 
@@ -328,7 +341,7 @@ function readPackageMetadata(value: unknown, field: string): MarketplacePackageM
         'description',
         'tags',
         'source',
-        'artifact',
+        'distribution',
         'compatibility',
         kind,
     ]);
@@ -347,8 +360,8 @@ function readPackageMetadata(value: unknown, field: string): MarketplacePackageM
             const tags = readOptionalStringArray(source.tags, `${field}.tags`);
             return tags && tags.length > 0 ? { tags } : {};
         })(),
-        source: readPackageSource(source.source, `${field}.source`),
-        artifact: readArtifact(source.artifact, `${field}.artifact`),
+        source: readUpstreamSource(source.source, `${field}.source`),
+        distribution: readDistribution(source.distribution, `${field}.distribution`),
         compatibility: readCompatibility(source.compatibility, `${field}.compatibility`),
     };
     if (kind === 'skill') {
@@ -404,9 +417,8 @@ function readLicenseCompliance(value: unknown, field: string): MarketplacePackag
 
 function readCompliance(value: unknown, field: string): MarketplacePackageCompliance {
     const source = readObject(value, field);
-    assertAllowedKeys(source, new Set(['sourceCommitSha', 'license']), field);
+    assertAllowedKeys(source, new Set(['license']), field);
     return {
-        sourceCommitSha: readCommitSha(source.sourceCommitSha, `${field}.sourceCommitSha`),
         license: readLicenseCompliance(source.license, `${field}.license`),
     };
 }
@@ -431,15 +443,36 @@ export function packageIdentity(metadata: MarketplacePackageMetadata): string {
     return `${metadata.kind}:${metadata.slug}:${metadata.version}`;
 }
 
-export function buildGeneratedCatalog(packages: MarketplacePackageMetadata[]): MarketplaceGeneratedCatalog {
+function withMarketplaceCommit(
+    metadata: MarketplacePackageMetadata,
+    marketplaceCommitSha: string
+): MarketplacePackageMetadata {
+    return {
+        ...metadata,
+        distribution: {
+            ...metadata.distribution,
+            commitSha: marketplaceCommitSha,
+        },
+    } as MarketplacePackageMetadata;
+}
+
+export function buildGeneratedCatalog(
+    packages: MarketplacePackageMetadata[],
+    options: { marketplaceCommitSha?: string; kind?: PackageKind } = {}
+): MarketplaceGeneratedCatalog {
+    const marketplaceCommitSha = options.marketplaceCommitSha ?? deterministicSourceCommit;
+    const filteredPackages =
+        options.kind === undefined ? packages : packages.filter((metadata) => metadata.kind === options.kind);
     return {
         schemaVersion: marketplaceCatalogSchemaVersion,
         generatedAt: deterministicGeneratedAt,
         source: {
             repositoryUrl: marketplaceRepositoryUrl,
-            commitSha: deterministicSourceCommit,
+            commitSha: marketplaceCommitSha,
         },
-        packages: [...packages].sort((left, right) => packageIdentity(left).localeCompare(packageIdentity(right))),
+        packages: filteredPackages
+            .map((metadata) => withMarketplaceCommit(metadata, marketplaceCommitSha))
+            .sort((left, right) => packageIdentity(left).localeCompare(packageIdentity(right))),
     };
 }
 
@@ -525,15 +558,60 @@ function validateLicensePolicy(pkg: AuthoredMarketplacePackage): void {
     );
 }
 
+async function collectPackageContentFiles(packageRoot: string): Promise<string[]> {
+    async function walk(dirPath: string): Promise<string[]> {
+        const entries = await readdir(dirPath, { withFileTypes: true });
+        const results: string[] = [];
+        for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+            const absolutePath = path.join(dirPath, entry.name);
+            const relativePath = normalizePathSeparators(path.relative(packageRoot, absolutePath));
+            if (entry.name === 'marketplace.v1.json') {
+                continue;
+            }
+            if (entry.isDirectory()) {
+                results.push(...(await walk(absolutePath)));
+            } else if (entry.isFile()) {
+                results.push(relativePath);
+            }
+        }
+        return results;
+    }
+    return walk(packageRoot);
+}
+
+export async function hashVendoredPackageDirectory(packageRoot: string): Promise<PackageContentDigest> {
+    const files = await collectPackageContentFiles(packageRoot);
+    if (files.length === 0) {
+        throw new Error('Invalid package directory: expected at least one vendored content file.');
+    }
+    const digest = createHash('sha256');
+    let sizeBytes = 0;
+    for (const file of files) {
+        const data = await readFile(path.join(packageRoot, file));
+        const fileSha256 = createHash('sha256').update(data).digest('hex');
+        sizeBytes += data.length;
+        digest.update(file, 'utf8');
+        digest.update('\0');
+        digest.update(String(data.length), 'utf8');
+        digest.update('\0');
+        digest.update(fileSha256, 'utf8');
+        digest.update('\n');
+    }
+    return { sha256: digest.digest('hex'), sizeBytes, files };
+}
+
 async function validatePackagePaths(rootDir: string, pkg: AuthoredMarketplacePackage): Promise<void> {
     const relativePackageRoot = normalizePathSeparators(path.relative(rootDir, pkg.packageRoot));
     const expectedFolder = expectedKindFolder(pkg.metadata.kind);
     if (!relativePackageRoot.startsWith(`${expectedFolder}/`)) {
         throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": package kind does not match folder family.`);
     }
-    if (pkg.metadata.source.relativePath !== relativePackageRoot) {
+    if (pkg.metadata.distribution.repositoryUrl !== marketplaceRepositoryUrl) {
+        throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": distribution.repositoryUrl must target MarketPlace-NC.`);
+    }
+    if (pkg.metadata.distribution.relativePath !== relativePackageRoot) {
         throw new Error(
-            `Invalid "${packageIdentity(pkg.metadata)}": source.relativePath must equal "${relativePackageRoot}".`
+            `Invalid "${packageIdentity(pkg.metadata)}": distribution.relativePath must equal "${relativePackageRoot}".`
         );
     }
     ensurePathWithinPackage({
@@ -557,6 +635,13 @@ async function validatePackagePaths(rootDir: string, pkg: AuthoredMarketplacePac
     const evidenceHash = await sha256File(evidencePath);
     if (evidenceHash !== pkg.compliance.license.evidenceSha256) {
         throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": license evidence SHA-256 does not match.`);
+    }
+    const contentDigest = await hashVendoredPackageDirectory(pkg.packageRoot);
+    if (contentDigest.sha256 !== pkg.metadata.distribution.contentSha256) {
+        throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": vendored package content SHA-256 does not match.`);
+    }
+    if (contentDigest.sizeBytes !== pkg.metadata.distribution.sizeBytes) {
+        throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": vendored package content size does not match.`);
     }
 }
 
@@ -591,21 +676,67 @@ export async function validateMarketplace(rootDir: string): Promise<MarketplaceV
     return { packages, catalog };
 }
 
+function generatedCatalogs(packages: MarketplacePackageMetadata[], marketplaceCommitSha?: string): Map<string, MarketplaceGeneratedCatalog> {
+    const options = marketplaceCommitSha === undefined ? {} : { marketplaceCommitSha };
+    return new Map([
+        ['catalog.v1.json', buildGeneratedCatalog(packages, options)],
+        ['skills.v1.json', buildGeneratedCatalog(packages, { ...options, kind: 'skill' })],
+        ['mcps.v1.json', buildGeneratedCatalog(packages, { ...options, kind: 'mcp' })],
+        ['modes.v1.json', buildGeneratedCatalog(packages, { ...options, kind: 'mode' })],
+    ]);
+}
+
 export async function writeGeneratedCatalog(rootDir: string): Promise<MarketplaceGeneratedCatalog> {
-    const { catalog } = await validateMarketplace(rootDir);
-    const outputPath = path.join(rootDir, 'generated', 'catalog.v1.json');
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, `${JSON.stringify(catalog, null, 4)}\n`, 'utf8');
+    const { packages, catalog } = await validateMarketplace(rootDir);
+    const outputRoot = path.join(rootDir, 'generated');
+    await mkdir(outputRoot, { recursive: true });
+    for (const [fileName, generatedCatalog] of generatedCatalogs(packages.map((pkg) => pkg.metadata))) {
+        await writeFile(path.join(outputRoot, fileName), `${JSON.stringify(generatedCatalog, null, 4)}\n`, 'utf8');
+    }
     return catalog;
 }
 
 export async function checkGeneratedCatalog(rootDir: string): Promise<void> {
-    const { catalog } = await validateMarketplace(rootDir);
-    const outputPath = path.join(rootDir, 'generated', 'catalog.v1.json');
-    const actual = await readFile(outputPath, 'utf8');
-    const expected = `${JSON.stringify(catalog, null, 4)}\n`;
-    if (actual !== expected) {
-        throw new Error('Generated catalog is stale. Run `pnpm run generate`.');
+    const { packages } = await validateMarketplace(rootDir);
+    const outputRoot = path.join(rootDir, 'generated');
+    for (const [fileName, generatedCatalog] of generatedCatalogs(packages.map((pkg) => pkg.metadata))) {
+        const actual = await readFile(path.join(outputRoot, fileName), 'utf8');
+        const expected = `${JSON.stringify(generatedCatalog, null, 4)}\n`;
+        if (actual !== expected) {
+            throw new Error(`Generated catalog "${fileName}" is stale. Run \`pnpm run generate\`.`);
+        }
+    }
+}
+
+export async function preparePagesOutput(input: {
+    rootDir: string;
+    outputDir: string;
+    marketplaceCommitSha: string;
+    check?: boolean;
+}): Promise<void> {
+    const { packages } = await validateMarketplace(input.rootDir);
+    const outputRoot = path.resolve(input.rootDir, input.outputDir);
+    const catalogRoot = path.join(outputRoot, 'catalog', 'v1');
+    const outputs = new Map([
+        ['catalog.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha })],
+        ['skills.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'skill' })],
+        ['mcps.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mcp' })],
+        ['modes.json', buildGeneratedCatalog(packages.map((pkg) => pkg.metadata), { marketplaceCommitSha: input.marketplaceCommitSha, kind: 'mode' })],
+    ]);
+    if (input.check) {
+        for (const [fileName, catalog] of outputs) {
+            const actual = await readFile(path.join(catalogRoot, fileName), 'utf8');
+            const expected = `${JSON.stringify(catalog, null, 4)}\n`;
+            if (actual !== expected) {
+                throw new Error(`Pages catalog "${fileName}" is stale. Run \`pnpm run pages\`.`);
+            }
+        }
+        return;
+    }
+    await rm(outputRoot, { recursive: true, force: true });
+    await mkdir(catalogRoot, { recursive: true });
+    for (const [fileName, catalog] of outputs) {
+        await writeFile(path.join(catalogRoot, fileName), `${JSON.stringify(catalog, null, 4)}\n`, 'utf8');
     }
 }
 
@@ -613,136 +744,60 @@ export async function sha256File(filePath: string): Promise<string> {
     return createHash('sha256').update(await readFile(filePath)).digest('hex');
 }
 
-function tarHeader(input: { name: string; size: number; type: '0' | '5' }): Buffer {
-    const buffer = Buffer.alloc(512, 0);
-    const write = (text: string, offset: number, length: number): void => {
-        buffer.write(text.slice(0, length), offset, length, 'ascii');
-    };
-    const writeOctal = (value: number, offset: number, length: number): void => {
-        const text = value.toString(8).padStart(length - 1, '0');
-        write(`${text}\0`, offset, length);
-    };
-    write(input.name, 0, 100);
-    writeOctal(input.type === '5' ? 0o755 : 0o644, 100, 8);
-    writeOctal(0, 108, 8);
-    writeOctal(0, 116, 8);
-    writeOctal(input.size, 124, 12);
-    writeOctal(0, 136, 12);
-    buffer.fill(0x20, 148, 156);
-    write(input.type, 156, 1);
-    write('ustar', 257, 6);
-    write('00', 263, 2);
-    const checksum = buffer.reduce((sum, byte) => sum + byte, 0);
-    write(checksum.toString(8).padStart(6, '0'), 148, 6);
-    buffer[154] = 0;
-    buffer[155] = 0x20;
-    return buffer;
-}
-
-function assertSupportedTarName(name: string): void {
-    if (!/^[\x20-\x7E]+$/u.test(name)) {
-        throw new Error(`Unsupported package archive path "${name}": tar paths must be ASCII.`);
-    }
-    if (Buffer.byteLength(name, 'ascii') > 100) {
-        throw new Error(`Unsupported package archive path "${name}": tar paths must be 100 bytes or fewer.`);
-    }
-}
-
-async function collectPackageArchiveEntries(packageRoot: string): Promise<Array<{ name: string; data?: Buffer }>> {
-    async function walk(dirPath: string): Promise<Array<{ name: string; data?: Buffer }>> {
-        const entries = await readdir(dirPath, { withFileTypes: true });
-        const results: Array<{ name: string; data?: Buffer }> = [];
-        for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-            const absolutePath = path.join(dirPath, entry.name);
-            const relativePath = normalizePathSeparators(path.relative(packageRoot, absolutePath));
-            if (entry.name === 'marketplace.v1.json') {
-                continue;
-            }
-            if (entry.isDirectory()) {
-                results.push({ name: `${relativePath}/` });
-                results.push(...(await walk(absolutePath)));
-            } else if (entry.isFile()) {
-                results.push({ name: relativePath, data: await readFile(absolutePath) });
-            }
-        }
-        return results;
-    }
-    return walk(packageRoot);
-}
-
-export async function buildPackageArchive(packageRoot: string): Promise<Buffer> {
-    const entries = await collectPackageArchiveEntries(packageRoot);
-    const chunks: Buffer[] = [];
-    for (const entry of entries) {
-        const data = entry.data ?? Buffer.alloc(0);
-        const archiveName = `package/${entry.name}`;
-        assertSupportedTarName(archiveName);
-        chunks.push(tarHeader({ name: archiveName, size: data.length, type: entry.name.endsWith('/') ? '5' : '0' }));
-        if (data.length > 0) {
-            chunks.push(data);
-            const padding = (512 - (data.length % 512)) % 512;
-            if (padding > 0) {
-                chunks.push(Buffer.alloc(padding, 0));
-            }
-        }
-    }
-    chunks.push(Buffer.alloc(1024, 0));
-    return gzipSync(Buffer.concat(chunks), { level: 9 });
-}
-
 export async function packageMarketplace(rootDir: string, options: { check?: boolean } = {}): Promise<PackageArtifactResult[]> {
     const { packages } = await validateMarketplace(rootDir);
-    const artifactsRoot = path.join(rootDir, '.marketplace-artifacts');
-    if (!options.check) {
-        await mkdir(artifactsRoot, { recursive: true });
-    }
-    const results: PackageArtifactResult[] = [];
-    for (const pkg of packages) {
-        const archive = await buildPackageArchive(pkg.packageRoot);
-        const sha256 = createHash('sha256').update(archive).digest('hex');
-        const fileName = `${pkg.metadata.kind}-${pkg.metadata.slug}-${pkg.metadata.version}.tgz`;
-        const result = {
-            packageIdentity: packageIdentity(pkg.metadata),
-            fileName,
-            sha256,
-            sizeBytes: archive.length,
-        };
-        if (options.check) {
-            if (sha256 !== pkg.metadata.artifact.sha256) {
-                throw new Error(`Invalid "${result.packageIdentity}": package artifact SHA-256 does not match metadata.`);
+    return Promise.all(
+        packages.map(async (pkg) => {
+            const digest = await hashVendoredPackageDirectory(pkg.packageRoot);
+            if (options.check) {
+                if (digest.sha256 !== pkg.metadata.distribution.contentSha256) {
+                    throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": vendored package content SHA-256 does not match.`);
+                }
+                if (digest.sizeBytes !== pkg.metadata.distribution.sizeBytes) {
+                    throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": vendored package content size does not match.`);
+                }
             }
-            if (
-                pkg.metadata.artifact.sizeBytes !== undefined &&
-                archive.length !== pkg.metadata.artifact.sizeBytes
-            ) {
-                throw new Error(`Invalid "${result.packageIdentity}": package artifact size does not match metadata.`);
-            }
-        }
-        if (!options.check) {
-            await writeFile(path.join(artifactsRoot, fileName), archive);
-        }
-        results.push(result);
-    }
-    return results;
+            return {
+                packageIdentity: packageIdentity(pkg.metadata),
+                sha256: digest.sha256,
+                sizeBytes: digest.sizeBytes,
+                files: digest.files,
+            };
+        })
+    );
 }
 
-export function resolveRootFromArgs(args: string[], cwd: string): { rootDir: string; check: boolean } {
+export function resolveRootFromArgs(args: string[], cwd: string): ResolvedCliArgs {
     const normalizedArgs = args.filter((arg) => arg !== '--');
+    let rootDir = cwd;
+    let outputDir = '.marketplace-pages';
+    let sourceCommit = deterministicSourceCommit;
+    const consumed = new Set<number>();
+    const consumeValue = (index: number, flag: string): string => {
+        const value = normalizedArgs[index + 1];
+        if (!value || value.startsWith('--')) {
+            throw new Error(`Expected a value after ${flag}.`);
+        }
+        consumed.add(index);
+        consumed.add(index + 1);
+        return value;
+    };
     const check = normalizedArgs.includes('--check');
-    const rootIndex = normalizedArgs.indexOf('--root');
-    const rootValueIndex = rootIndex === -1 ? -1 : rootIndex + 1;
-    const unknown = normalizedArgs.filter(
-        (arg, index) => arg !== '--check' && arg !== '--root' && index !== rootValueIndex
-    );
+    for (let index = 0; index < normalizedArgs.length; index += 1) {
+        const arg = normalizedArgs[index];
+        if (arg === '--check') {
+            consumed.add(index);
+        } else if (arg === '--root') {
+            rootDir = path.resolve(cwd, consumeValue(index, '--root'));
+        } else if (arg === '--output') {
+            outputDir = consumeValue(index, '--output');
+        } else if (arg === '--source-commit') {
+            sourceCommit = readCommitSha(consumeValue(index, '--source-commit'), '--source-commit');
+        }
+    }
+    const unknown = normalizedArgs.filter((_arg, index) => !consumed.has(index));
     if (unknown.length > 0) {
         throw new Error(`Unknown arguments: ${unknown.join(', ')}`);
     }
-    if (rootIndex === -1) {
-        return { rootDir: cwd, check };
-    }
-    const root = normalizedArgs[rootValueIndex];
-    if (!root || root.startsWith('--')) {
-        throw new Error('Expected a path after --root.');
-    }
-    return { rootDir: path.resolve(cwd, root), check };
+    return { rootDir, check, sourceCommit, outputDir };
 }

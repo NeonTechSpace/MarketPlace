@@ -15,7 +15,8 @@
         "validate": "tsx tools/validate-marketplace.ts",
         "generate": "tsx tools/generate-catalogs.ts",
         "package": "tsx tools/package-assets.ts",
-        "check": "pnpm run typecheck && pnpm run test && pnpm run validate && pnpm run generate -- --check && pnpm run package -- --check"
+        "pages": "tsx tools/prepare-pages.ts",
+        "check": "pnpm run typecheck && pnpm run test && pnpm run validate && pnpm run generate -- --check && pnpm run package -- --check && pnpm run pages && pnpm run pages -- --check"
     },
     "dependencies": {
         "semver": "^7.8.0"

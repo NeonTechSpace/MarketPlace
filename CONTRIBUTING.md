@@ -1,8 +1,6 @@
 # Contributing
 
-This repository publishes NeonConductor marketplace entries after review. During
-Phase 18A, contribution work is limited to package layout, metadata, validation,
-and tooling.
+This repository publishes NeonConductor marketplace entries after review.
 
 ## Branch Names
 
@@ -12,8 +10,10 @@ and tooling.
 Examples:
 
 - `add-package/skill/repo-review-1.0.0`
-- `add-package/mode/focused-implementer-1.0.0`
+- `add-package/mcp/github-1.0.0`
 - `tool/catalog-validator`
+
+Do not create `dev` or `prev` unless a phase explicitly needs those branches.
 
 ## PR Titles
 
@@ -28,20 +28,23 @@ Allowed types:
 
 Useful marketplace scopes:
 
-`marketplace`, `package-skill`, `package-mode`, `package-mcp`, `licensing`, `provenance`, `tools`
+`marketplace`, `package-skill`, `package-mcp`, `licensing`, `provenance`, `tools`
 
 ## Package Submission Rules
 
 Every package must include:
 
+- vendored package files in this repository
 - source repository URL
-- pinned source commit
-- source-relative path
-- package version
+- pinned upstream source commit
+- upstream source-relative path
+- marketplace package path
+- marketplace package version
+- vendored package content SHA-256
+- vendored package byte size
 - SPDX license expression
 - license evidence path
 - license evidence SHA-256
-- generated artifact SHA-256
 - review status
 - required notices
 
@@ -54,6 +57,29 @@ Permissive SPDX/OSI licenses such as `MIT`, `Apache-2.0`, `BSD-2-Clause`,
 `BSD-3-Clause`, `ISC`, and `0BSD` can pass automatically when evidence matches.
 Other licenses require maintainer review before publication.
 
+## Skills And MCPs
+
+Skills and MCPs are eligible for package submissions during Phase 18B when their
+vendored files and license evidence validate.
+
+`skills.sh`, GitHub starred repositories, and GitHub search may be used as
+candidate discovery sources. They are not trust authorities. A package is
+accepted only after source, license, path, and hash validation passes.
+
+## Modes
+
+Mode packages are deferred until NeonConductor first alpha is finished.
+
+A future marketplace-ready mode should include:
+
+- clear operator purpose
+- prompt and behavior boundaries
+- expected model and tool capabilities
+- activation assumptions
+- safety and permission posture
+- compatibility range
+- examples and validation expectations
+
 ## Validation
 
 Run:
@@ -62,8 +88,8 @@ Run:
 pnpm run check
 ```
 
-Do not add publishing behavior, GitHub Releases, GitHub Packages, Deployments,
-Environments, or GitHub Pages in Phase 18A.
+Do not add GitHub Releases or GitHub Packages for package artifacts in Phase
+18B. GitHub Pages is used for generated catalog publication.
 
 ## AI Assistance Disclosure
 
