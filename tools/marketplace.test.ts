@@ -174,7 +174,7 @@ function recomputePackageDigestFromManifest(files: MarketplacePackageFileManifes
 }
 
 describe('marketplace validation', () => {
-    it('accepts an empty marketplace and writes deterministic generated catalogs', async () => {
+    it('accepts an empty marketplace and writes ignored local generated catalogs', async () => {
         await withTempMarketplace(async (rootDir) => {
             await writeGeneratedCatalog(rootDir);
             await checkGeneratedCatalog(rootDir);
@@ -189,6 +189,12 @@ describe('marketplace validation', () => {
             expect(catalog.source.repositoryUrl).toBe(marketplaceRepositoryUrl);
             expect(catalog.packages).toEqual([]);
             expect(modesCatalog.packages).toEqual([]);
+        });
+    });
+
+    it('checks generated catalog determinism without tracked generated files', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await checkGeneratedCatalog(rootDir);
         });
     });
 

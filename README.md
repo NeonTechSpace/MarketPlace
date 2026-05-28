@@ -1,72 +1,126 @@
 # NeonConductor MarketPlace-NC
 
-MarketPlace-NC is the public catalog and package source for NeonConductor marketplace entries.
-It is validation-first and does not publish GitHub Releases or GitHub Packages.
-GitHub Pages hosts generated catalog JSON only.
+MarketPlace-NC is the public package catalog for NeonConductor.
+It is validation-first.
+It does not use GitHub Releases or GitHub Packages.
+GitHub Pages hosts generated catalog JSON.
 
-## How It Works
+## Quick Model
 
-The preferred authoring surface is `sources/*.v1.json`.
-Those files are small review records that say where a package comes from, which upstream files are selected, what license evidence was reviewed, and which NeonConductor versions the package targets.
-The source sync tool can fetch only those selected raw files from the resolved upstream commit.
-The synced files are vendored into `skills/<slug>/`, `mcps/<slug>/`, or `modes/<slug>/`.
-Each vendored package directory owns a `marketplace.v1.json` file.
-That file is generated or validated package metadata, not the main thing people should hand-write for source-pulled packages.
+- Write small source records in `sources/*.v1.json`.
+- Sync selected upstream raw files into `skills/`, `mcps/`, or `modes/`.
+- Validate vendored files, license evidence, hashes, and package shape.
+- Generate catalogs in CI.
+- Publish only `catalog/v1/*.json` through GitHub Pages.
 
-Generated catalogs live in `generated/`.
-Pages output lives under `catalog/v1/` when the Pages workflow runs.
-The full catalog is `catalog/v1/catalog.json`.
-Family catalogs are `catalog/v1/skills.json`, `catalog/v1/mcps.json`, and `catalog/v1/modes.json`.
-Family catalogs exist so NeonConductor can load only the package family it needs.
-The full catalog exists for browsing, audits, and tooling that wants all package families at once.
+NeonConductor installs from MarketPlace-NC.
+Upstream repos are provenance and update inputs.
 
-## Source And Distribution
+## Source Records
 
-`source.commitSha` is upstream provenance.
-It records the upstream commit that was reviewed or fetched.
-`distribution.commitSha` is the Marketplace-NC commit NeonConductor installs from.
-NeonConductor installs from Marketplace-NC, not from upstream repositories.
-The upstream repository remains evidence and update input.
+Use these files as the normal package request surface:
+
+- `sources/skills.v1.json`
+- `sources/mcps.v1.json`
+- `sources/modes.v1.json`
+
+Each source record says:
+
+- package kind, slug, version, name, and summary
+- upstream repository, ref or commit, and source path
+- selected upstream files to copy
+- entry file or manifest file
+- Neon compatibility range
+- license evidence and review status
+
+Use `pnpm run source:sync` to materialize source records.
+Use `pnpm run source:check` to validate source records without writing files.
+
+## Vendored Packages
+
+Vendored package files live here:
+
+- `skills/<slug>/`
+- `mcps/<slug>/`
+- `modes/<slug>/`
+
+Each package directory contains `marketplace.v1.json`.
+For source-pulled packages, that file is generated metadata.
+For manual packages, that file is validated metadata.
+
+Normal file names:
+
+- skills: `SKILL.md`
+- MCPs: `server.json`
+- modes: `mode.json`
+
+Keep packages small and inspectable.
+Do not copy whole repositories.
+Do not vendor dependency trees, binaries, or unrelated examples unless there is an approved reason.
+
+## Catalogs
+
+Catalogs are generated output.
+They are not tracked source truth.
+Local generation writes ignored files under `generated/`.
+CI prepares Pages output under `.marketplace-pages/`.
+
+Published catalog paths:
+
+- `catalog/v1/catalog.json`
+- `catalog/v1/skills.json`
+- `catalog/v1/mcps.json`
+- `catalog/v1/modes.json`
+
+Family catalogs let NeonConductor load only one package type.
+The full catalog is for browsing, audits, and tooling.
+
+## Install Safety
+
+`source.commitSha` is the upstream commit that was reviewed or fetched.
+`distribution.commitSha` is the MarketPlace-NC commit NeonConductor installs from.
 
 Catalog entries include `distribution.files`.
-Each file entry has a package-relative path, SHA-256, and byte size.
-NeonConductor fetches only the selected package files from the pinned Marketplace-NC commit.
-It verifies every file hash and size, then recomputes the aggregate package hash before trusting the install.
-
-## Folders
-
-`sources/` contains compact package-intake files.
-`skills/`, `mcps/`, and `modes/` contain vendored package files.
-`generated/` contains checked generated catalog fixtures for validation.
-`tools/` contains validation, source sync, catalog generation, Pages preparation, upstream monitoring, and tests.
-`.github/` contains validation-only workflows and repository metadata.
-
-Package directories should be named with lowercase kebab-case slugs.
-Package metadata files are always named `marketplace.v1.json`.
-Skill entry files are usually named `SKILL.md`.
-MCP manifest files are usually named `server.json`.
-Mode manifest files are usually named `mode.json`.
-
-Keep packages small enough that a user can understand what is being installed.
-Use selected-file package entries instead of copying whole repositories.
-If a candidate needs many large files, split it or leave it out until there is a stronger product reason.
-Every generated catalog records byte sizes so reviewers can see package weight before install.
+Each file entry records package-relative path, SHA-256, and byte size.
+NeonConductor fetches only those listed files.
+NeonConductor verifies every listed file before install.
 
 ## Modes
 
-Mode packages are supported by the schema and validator.
-Real mode publication still needs explicit approval.
-Marketplace mode manifests must be NeonConductor portable mode JSON v2.
-Valid mode authoring roles are `chat`, `single_task_agent`, `orchestrator_primary`, and `orchestrator_worker_agent`.
-Valid role templates are the role templates NeonConductor currently supports for those roles.
-The validator rejects mode manifests that use unknown fields, invalid role/template pairs, portable mode v1, or malformed prompt-layer overrides.
+Mode manifests must be NeonConductor portable mode JSON v2.
+Mode packages import into NeonConductor as drafts.
+They do not activate modes directly.
+
+Supported authoring roles:
+
+- `chat`
+- `single_task_agent`
+- `orchestrator_primary`
+- `orchestrator_worker_agent`
+
+The role template must match the authoring role.
+The validator rejects portable mode v1, unknown fields, bad role/template pairs, and malformed prompt overrides.
 
 ## License Policy
 
-Permissive SPDX licenses are accepted when the evidence file hash matches the reviewed source.
+Accepted code-license baseline:
+
+- MIT
+- Apache-2.0
+- BSD-2-Clause
+- BSD-3-Clause
+- ISC
+- 0BSD
+
+CC0-1.0 may be accepted for non-code material.
 Restricted or unclear licenses are blocked.
-Unlicensed upstream packages may be accepted only with explicit `UNLICENSED` metadata, an `approved_unlicensed` review status, a pinned upstream commit, and checked evidence explaining that no license file was present at that commit.
-That status remains visible so NeonConductor can present the package honestly.
+
+Unlicensed upstream packages can be accepted only with:
+
+- `spdxExpression: "UNLICENSED"`
+- `reviewStatus: "approved_unlicensed"`
+- pinned upstream commit evidence
+- a checked evidence file explaining no license file was present at that commit
 
 ## Commands
 
@@ -76,38 +130,26 @@ Install dependencies:
 pnpm install --frozen-lockfile
 ```
 
-Validate everything:
+Run the full validation:
 
 ```powershell
 pnpm run check
 ```
 
-Sync source entries into vendored package files:
+Sync source records:
 
 ```powershell
 pnpm run source:sync
 ```
 
-Check source entries without writing vendored files:
-
-```powershell
-pnpm run source:check
-```
-
-Regenerate catalogs:
+Generate local catalogs:
 
 ```powershell
 pnpm run generate
 ```
 
-Prepare Pages catalog output:
+Prepare Pages output:
 
 ```powershell
 pnpm run pages
-```
-
-Check upstream package updates:
-
-```powershell
-pnpm run upstream:check
 ```

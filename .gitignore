@@ -1,4 +1,5 @@
 node_modules/
+generated/
 .marketplace-artifacts/
 .marketplace-pages/
 .marketplace-upstream-report.md
