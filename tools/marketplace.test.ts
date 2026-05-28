@@ -14,12 +14,18 @@ import {
     preparePagesOutput,
     resolveRootFromArgs,
     sha256File,
+    validatePortableModeManifestJson,
     validateMarketplace,
     writeGeneratedCatalog,
     type LicenseReviewStatus,
     type PackageKind,
     type MarketplacePackageFileManifestEntry,
 } from './lib/marketplace.js';
+import {
+    materializeSourceIntakePackage,
+    parseSourceIntakeCatalog,
+    validateSourceIntakeCatalogs,
+} from './lib/source-intake.js';
 
 interface FixturePackageInput {
     kind: PackageKind;
@@ -62,9 +68,20 @@ function entryFileName(kind: PackageKind): string {
         return 'SKILL.md';
     }
     if (kind === 'mode') {
-        return 'MODE.yaml';
+        return 'mode.json';
     }
     return 'MCP.yaml';
+}
+
+function modeManifest(input: { authoringRole?: string; roleTemplate?: string; version?: number } = {}): string {
+    return JSON.stringify({
+        version: input.version ?? 2,
+        slug: 'focused-implementer',
+        name: 'Focused Implementer',
+        authoringRole: input.authoringRole ?? 'single_task_agent',
+        roleTemplate: input.roleTemplate ?? 'single_task_agent/apply',
+        customInstructions: 'Implement one approved task at a time.',
+    });
 }
 
 async function addPackage(rootDir: string, input: FixturePackageInput): Promise<string> {
@@ -75,7 +92,11 @@ async function addPackage(rootDir: string, input: FixturePackageInput): Promise<
     const entryPath = path.join(rootDir, entryRelativePath);
     if (input.writeEntry !== false) {
         await mkdir(path.dirname(entryPath), { recursive: true });
-        await writeFile(entryPath, `${input.kind} fixture for ${input.slug}\n`, 'utf8');
+        await writeFile(
+            entryPath,
+            input.kind === 'mode' ? modeManifest() : `${input.kind} fixture for ${input.slug}\n`,
+            'utf8'
+        );
     }
     const licenseRelativePath = `${kindRoot(input.kind)}/${input.slug}/LICENSE`;
     const licensePath = path.join(rootDir, licenseRelativePath);
@@ -322,6 +343,69 @@ describe('marketplace validation', () => {
         });
     });
 
+    it('accepts explicit reviewed unlicensed package evidence', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await addPackage(rootDir, {
+                kind: 'skill',
+                slug: 'repo-review',
+                reviewStatus: 'approved_unlicensed',
+                spdxExpression: 'UNLICENSED',
+            });
+            const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
+            const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+                metadata: { source: { commitSha: string } };
+                compliance: { license: { notices: string[] } };
+            };
+            authored.compliance.license.notices = [
+                `No license file was present at upstream commit ${authored.metadata.source.commitSha}.`,
+            ];
+            await writeFile(metadataPath, `${JSON.stringify(authored, null, 4)}\n`, 'utf8');
+
+            await expect(validateMarketplace(rootDir)).resolves.toMatchObject({ packages: expect.any(Array) });
+        });
+    });
+
+    it('validates portable mode v2 role templates before catalog publication', async () => {
+        const validPairs = [
+            ['chat', 'chat/default'],
+            ['single_task_agent', 'single_task_agent/review'],
+            ['orchestrator_primary', 'orchestrator_primary/orchestrate'],
+            ['orchestrator_worker_agent', 'orchestrator_worker_agent/explorer'],
+        ] as const;
+        for (const [authoringRole, roleTemplate] of validPairs) {
+            expect(() => validatePortableModeManifestJson(modeManifest({ authoringRole, roleTemplate }))).not.toThrow();
+        }
+        expect(() =>
+            validatePortableModeManifestJson(modeManifest({ authoringRole: 'chat', roleTemplate: 'single_task_agent/apply' }))
+        ).toThrow(/roleTemplate must match/u);
+        expect(() => validatePortableModeManifestJson(modeManifest({ version: 1 }))).toThrow(/version 2/u);
+        expect(() =>
+            validatePortableModeManifestJson(
+                JSON.stringify({
+                    version: 2,
+                    slug: 'bad-mode',
+                    name: 'Bad Mode',
+                    authoringRole: 'single_task_agent',
+                    roleTemplate: 'single_task_agent/apply',
+                    unknown: true,
+                })
+            )
+        ).toThrow(/unexpected field/u);
+    });
+
+    it('rejects invalid mode packages during marketplace validation', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await addPackage(rootDir, { kind: 'mode', slug: 'focused-implementer' });
+            await writeFile(
+                path.join(rootDir, 'modes', 'focused-implementer', 'mode.json'),
+                modeManifest({ authoringRole: 'orchestrator_primary', roleTemplate: 'single_task_agent/apply' }),
+                'utf8'
+            );
+
+            await expect(validateMarketplace(rootDir)).rejects.toThrow(/roleTemplate must match/u);
+        });
+    });
+
     it('rejects approved status for licenses that need manual review', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review', spdxExpression: 'GPL-3.0-only' });
@@ -372,5 +456,144 @@ describe('marketplace validation', () => {
         });
         expect(() => resolveRootFromArgs(['--wat'], cwd)).toThrow(/Unknown arguments/u);
         expect(() => resolveRootFromArgs(['--root', '--check'], cwd)).toThrow(/Expected a value/u);
+    });
+});
+
+describe('source intake', () => {
+    it('parses empty family source catalogs', () => {
+        expect(parseSourceIntakeCatalog({ schemaVersion: 1, kind: 'skill', packages: [] })).toMatchObject({
+            kind: 'skill',
+            packages: [],
+        });
+    });
+
+    it('materializes source-pull packages into vendored package metadata', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            const sourceCatalog = parseSourceIntakeCatalog({
+                schemaVersion: 1,
+                kind: 'skill',
+                packages: [
+                    {
+                        intake: 'source_pull',
+                        kind: 'skill',
+                        slug: 'repo-review',
+                        version: '1.0.0',
+                        name: 'Repo Review',
+                        summary: 'Review repository changes.',
+                        source: {
+                            repositoryUrl: 'https://github.com/example/source',
+                            ref: 'main',
+                            relativePath: 'skills/repo-review',
+                        },
+                        compatibility: {
+                            neonVersionRange: '>=0.0.1 <1.0.0',
+                        },
+                        license: {
+                            spdxExpression: 'MIT',
+                            evidenceFile: 'LICENSE',
+                            reviewStatus: 'approved',
+                        },
+                        files: [
+                            { upstreamPath: 'skills/repo-review/SKILL.md', packagePath: 'SKILL.md' },
+                            { upstreamPath: 'LICENSE', packagePath: 'LICENSE' },
+                        ],
+                        skill: {
+                            entryFile: 'SKILL.md',
+                        },
+                    },
+                ],
+            });
+            await materializeSourceIntakePackage({
+                rootDir,
+                catalogKind: sourceCatalog.kind,
+                sourcePackage: sourceCatalog.packages[0]!,
+                resolvedCommitSha: '0123456789abcdef0123456789abcdef01234567',
+                files: [
+                    { packagePath: 'SKILL.md', bytes: new TextEncoder().encode('Skill body\n') },
+                    { packagePath: 'LICENSE', bytes: new TextEncoder().encode('MIT License\n') },
+                ],
+            });
+
+            const result = await validateMarketplace(rootDir);
+            expect(result.packages[0]?.metadata).toMatchObject({
+                kind: 'skill',
+                slug: 'repo-review',
+                source: { commitSha: '0123456789abcdef0123456789abcdef01234567' },
+                skill: { entryFile: 'skills/repo-review/SKILL.md' },
+            });
+        });
+    });
+
+    it('accepts reviewed unlicensed source entries and rejects mismatched status', () => {
+        expect(() =>
+            parseSourceIntakeCatalog({
+                schemaVersion: 1,
+                kind: 'skill',
+                packages: [
+                    {
+                        intake: 'source_pull',
+                        kind: 'skill',
+                        slug: 'repo-review',
+                        version: '1.0.0',
+                        name: 'Repo Review',
+                        summary: 'Review repository changes.',
+                        source: {
+                            repositoryUrl: 'https://github.com/example/source',
+                            commitSha: '0123456789abcdef0123456789abcdef01234567',
+                            relativePath: 'skills/repo-review',
+                        },
+                        compatibility: { neonVersionRange: '>=0.0.1 <1.0.0' },
+                        license: {
+                            spdxExpression: 'UNLICENSED',
+                            evidenceFile: 'UNLICENSED.md',
+                            reviewStatus: 'approved_unlicensed',
+                            notices: ['No license file was present at upstream commit 0123456789abcdef0123456789abcdef01234567.'],
+                        },
+                        files: [{ upstreamPath: 'SKILL.md', packagePath: 'SKILL.md' }],
+                        skill: { entryFile: 'SKILL.md' },
+                    },
+                ],
+            })
+        ).not.toThrow();
+        expect(() =>
+            parseSourceIntakeCatalog({
+                schemaVersion: 1,
+                kind: 'skill',
+                packages: [
+                    {
+                        intake: 'source_pull',
+                        kind: 'skill',
+                        slug: 'repo-review',
+                        version: '1.0.0',
+                        name: 'Repo Review',
+                        summary: 'Review repository changes.',
+                        source: {
+                            repositoryUrl: 'https://github.com/example/source',
+                            commitSha: '0123456789abcdef0123456789abcdef01234567',
+                            relativePath: 'skills/repo-review',
+                        },
+                        compatibility: { neonVersionRange: '>=0.0.1 <1.0.0' },
+                        license: {
+                            spdxExpression: 'MIT',
+                            evidenceFile: 'UNLICENSED.md',
+                            reviewStatus: 'approved_unlicensed',
+                        },
+                        files: [{ upstreamPath: 'SKILL.md', packagePath: 'SKILL.md' }],
+                        skill: { entryFile: 'SKILL.md' },
+                    },
+                ],
+            })
+        ).toThrow(/UNLICENSED/u);
+    });
+
+    it('validates checked-in source catalog files', async () => {
+        await withTempMarketplace(async (rootDir) => {
+            await mkdir(path.join(rootDir, 'sources'), { recursive: true });
+            await writeFile(path.join(rootDir, 'sources', 'skills.v1.json'), '{"schemaVersion":1,"kind":"skill","packages":[]}\n');
+            await writeFile(path.join(rootDir, 'sources', 'mcps.v1.json'), '{"schemaVersion":1,"kind":"mcp","packages":[]}\n');
+            await writeFile(path.join(rootDir, 'sources', 'modes.v1.json'), '{"schemaVersion":1,"kind":"mode","packages":[]}\n');
+
+            await expect(validateSourceIntakeCatalogs(rootDir)).resolves.toHaveLength(3);
+        });
     });
 });

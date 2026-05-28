@@ -12,6 +12,7 @@ import {
     type AuthoredMarketplacePackage,
     type PackageKind,
 } from './marketplace.js';
+import { validateSourceIntakeCatalogs, type SourceIntakePackage } from './source-intake.js';
 
 export const upstreamMonitorSchemaVersion = 1 as const;
 export const defaultUpstreamMonitorConfigPath = 'tools/upstream-monitor.v1.json';
@@ -48,6 +49,44 @@ export interface UpstreamMonitorLicenseMapping {
     upstreamPath: string;
     packagePath: string;
     spdxExpression: string;
+}
+
+function sourcePackageToMonitorPackage(pkg: SourceIntakePackage): UpstreamMonitorPackage | undefined {
+    if (pkg.intake !== 'source_pull' || pkg.kind === 'mode' || !pkg.source.commitSha) {
+        return undefined;
+    }
+    const licenseFile = pkg.files.find((file) => file.packagePath === pkg.license.evidenceFile);
+    if (!licenseFile || pkg.license.reviewStatus !== 'approved') {
+        return undefined;
+    }
+    return {
+        kind: pkg.kind,
+        slug: pkg.slug,
+        upstreamRepositoryUrl: pkg.source.repositoryUrl,
+        upstreamRef: pkg.source.ref ?? pkg.source.commitSha,
+        pinnedCommitSha: pkg.source.commitSha,
+        sourceRoot: pkg.source.relativePath,
+        packageRoot: `${pkg.kind === 'skill' ? 'skills' : 'mcps'}/${pkg.slug}`,
+        files: pkg.files.filter((file) => file.packagePath !== pkg.license.evidenceFile),
+        license: {
+            upstreamPath: licenseFile.upstreamPath,
+            packagePath: licenseFile.packagePath,
+            spdxExpression: pkg.license.spdxExpression,
+        },
+    };
+}
+
+async function loadSourceDerivedMonitorConfig(rootDir: string): Promise<UpstreamMonitorConfig> {
+    const catalogs = await validateSourceIntakeCatalogs(rootDir);
+    return {
+        schemaVersion: upstreamMonitorSchemaVersion,
+        packages: catalogs.flatMap((catalog) =>
+            catalog.packages.flatMap((pkg) => {
+                const monitorPackage = sourcePackageToMonitorPackage(pkg);
+                return monitorPackage ? [monitorPackage] : [];
+            })
+        ),
+    };
 }
 
 export interface UpstreamMonitorOptions {
@@ -572,10 +611,14 @@ export function buildUpstreamUpdateReport(results: UpstreamMonitorPackageResult[
 }
 
 export async function runUpstreamMonitor(options: UpstreamMonitorOptions): Promise<UpstreamMonitorRunResult> {
-    const config = await loadUpstreamMonitorConfig({
+    const explicitConfig = await loadUpstreamMonitorConfig({
         rootDir: options.rootDir,
         ...(options.configPath ? { configPath: options.configPath } : {}),
     });
+    const config =
+        explicitConfig.packages.length > 0 || options.configPath
+            ? explicitConfig
+            : await loadSourceDerivedMonitorConfig(options.rootDir);
     const packages = await loadAuthoredPackages(options.rootDir);
     const authoredByIdentity = new Map(
         packages.map((pkg) => [`${pkg.metadata.kind}:${pkg.metadata.slug}`, pkg] as const)
@@ -629,7 +672,7 @@ export async function runUpstreamMonitor(options: UpstreamMonitorOptions): Promi
             })
         );
     }
-    if (!options.check && results.some((result) => result.status === 'updated')) {
+    if (!options.check && explicitConfig.packages.length > 0 && results.some((result) => result.status === 'updated')) {
         const configPath = path.resolve(options.rootDir, options.configPath ?? defaultUpstreamMonitorConfigPath);
         const currentConfig = parseUpstreamMonitorConfig(JSON.parse(await readFile(configPath, 'utf8')) as unknown);
         const nextConfig: UpstreamMonitorConfig = {

@@ -1,36 +1,28 @@
-# Phase 18B Candidate Intake
+# Candidate Intake
 
-Candidate sources used for Phase 18B:
+Candidate discovery can use GitHub stars, GitHub search, curated lists, and directories such as `skills.sh`.
+Discovery sources are not install sources.
+Marketplace packages install from vendored files in MarketPlace-NC.
 
-- GitHub starred repositories
-- GitHub repository search for MCP and skill packages
-- `skills.sh` as discovery only
+The preferred intake path is a source entry in `sources/*.v1.json`.
+The source entry declares selected upstream files, package identity, compatibility, and license evidence.
+The source sync tool fetches only those selected raw files from a resolved upstream commit.
+It then writes vendored package files and `marketplace.v1.json`.
 
-Seed packages accepted in this slice:
+Manual uploads remain allowed for user-authored packages or cases where no upstream repository exists.
+Manual uploads still need the same license, provenance, hash, and package-shape validation.
 
-| Kind | Slug | Upstream | Commit | License | Reason |
-| --- | --- | --- | --- | --- | --- |
-| skill | `enhance-prompt` | `google-labs-code/stitch-skills` | `53f15d81da854039aae10e8af19ad389c3997653` | Apache-2.0 | Small, directly vendorable skill with clear `SKILL.md` entry and license evidence. |
-| skill | `taste-design` | `google-labs-code/stitch-skills` | `53f15d81da854039aae10e8af19ad389c3997653` | Apache-2.0 | Small, directly vendorable design-review skill with clear `SKILL.md` entry and license evidence. |
-| mcp | `github` | `github/github-mcp-server` | `f80ca8555bd5cd89e4b0850505fb6f392413b5a2` | MIT | Official GitHub MCP manifest with clear source, license evidence, and stable manifest file. |
+No candidate is accepted just because it is popular.
+A candidate must have a clear source path, selected files, reproducible hashes, reviewable size, and license evidence.
+Permissive licenses can pass when evidence hashes match.
+Restricted or unclear licenses block publication.
+Unlicensed repositories can pass only with explicit `UNLICENSED` metadata, pinned commit evidence, and human review.
 
-Candidates deferred or blocked:
+Mode packages must validate as NeonConductor portable mode JSON v2.
+Mode packages remain draft-only when imported into NeonConductor.
+Real mode publication still needs explicit approval.
 
-- `vercel-labs/agent-skills`: GitHub API did not report a license at discovery time.
-- `openai/skills`: GitHub API did not report a license at discovery time.
-- Curated-list repositories such as awesome lists: discovery sources only, not installable package entries.
-- Mode packages: deferred until NeonConductor first alpha is finished.
-
-Future update pipeline:
-
-- Phase 18G implements PR-only upstream update monitoring.
-- The monitor reads `tools/upstream-monitor.v1.json`.
-- It checks configured upstream refs on a schedule or manual dispatch.
-- It fetches only configured raw files from the resolved upstream commit.
-- It does not download repository archives.
-- It does not update packages that are not listed in the monitor config.
-- It re-vendors changed files, recomputes content hashes, reruns license checks, regenerates catalogs, and includes risk flags.
-- It blocks updates when license evidence disappears, source paths move unexpectedly, package shape changes, configured files are missing, or hashes cannot be reproduced.
-- It does not update modes before NeonConductor first alpha is finished.
-- It creates PRs only.
-- Human review is required before any update reaches `main`.
+The upstream monitor reads source-pulled skill and MCP entries when the legacy monitor config is empty.
+It creates review pull requests only.
+It does not update mode packages.
+It does not auto-merge or bypass validation.

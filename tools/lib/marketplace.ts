@@ -14,6 +14,7 @@ export type PackageKind = (typeof packageKinds)[number];
 
 export const licenseReviewStatuses = [
     'approved',
+    'approved_unlicensed',
     'manual_review',
     'blocked_no_license',
     'blocked_restricted',
@@ -25,6 +26,56 @@ const approvedLicenseExpressions = new Set(['MIT', 'Apache-2.0', 'BSD-2-Clause',
 const approvedNonCodeLicenseExpressions = new Set(['CC0-1.0']);
 const sha256Pattern = /^[a-f0-9]{64}$/u;
 const commitShaPattern = /^[a-f0-9]{7,64}$/u;
+const modeAuthoringRoles = [
+    'chat',
+    'single_task_agent',
+    'orchestrator_primary',
+    'orchestrator_worker_agent',
+] as const;
+const modeRoleTemplatesByAuthoringRole = {
+    chat: ['chat/default'],
+    single_task_agent: [
+        'single_task_agent/ask',
+        'single_task_agent/plan',
+        'single_task_agent/apply',
+        'single_task_agent/debug',
+        'single_task_agent/research',
+        'single_task_agent/review',
+    ],
+    orchestrator_primary: [
+        'orchestrator_primary/plan',
+        'orchestrator_primary/orchestrate',
+        'orchestrator_primary/debug',
+    ],
+    orchestrator_worker_agent: [
+        'orchestrator_worker_agent/apply',
+        'orchestrator_worker_agent/debug',
+        'orchestrator_worker_agent/explorer',
+    ],
+} as const;
+const portableModeV2AllowedKeys = new Set([
+    'version',
+    'slug',
+    'name',
+    'authoringRole',
+    'roleTemplate',
+    'description',
+    'roleDefinition',
+    'customInstructions',
+    'whenToUse',
+    'tags',
+    'promptLayerOverrides',
+]);
+const preparedContextModeOverrideGroups = [
+    'app_global_instructions',
+    'profile_global_instructions',
+    'top_level_instructions',
+] as const;
+const preparedContextModeOverrideCheckpoints = [
+    'bootstrap',
+    'post_compaction_reseed',
+] as const;
+const preparedContextModeOverrideValues = ['inherit', 'include', 'exclude'] as const;
 
 export interface MarketplaceCatalogSource {
     repositoryUrl: string;
@@ -301,6 +352,72 @@ function readPositiveInteger(value: unknown, field: string): number {
     return number;
 }
 
+function readOptionalTrimmedString(value: unknown, field: string): string | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    const text = readString(value, field).replace(/\r\n?/gu, '\n').trim();
+    return text.length > 0 ? text : undefined;
+}
+
+function readPortableModeStringArray(value: unknown, field: string): string[] | undefined {
+    const values = readOptionalStringArray(value, field);
+    if (!values || values.length === 0) {
+        return undefined;
+    }
+    return values.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+}
+
+function validatePromptLayerOverrides(value: unknown, field: string): void {
+    if (value === undefined) {
+        return;
+    }
+    const source = readObject(value, field);
+    assertAllowedKeys(source, new Set(preparedContextModeOverrideGroups), field);
+    for (const group of Object.keys(source)) {
+        const checkpoints = readObject(source[group], `${field}.${group}`);
+        assertAllowedKeys(checkpoints, new Set(preparedContextModeOverrideCheckpoints), `${field}.${group}`);
+        for (const checkpoint of Object.keys(checkpoints)) {
+            readEnum(
+                checkpoints[checkpoint],
+                `${field}.${group}.${checkpoint}`,
+                preparedContextModeOverrideValues
+            );
+        }
+    }
+}
+
+export function validatePortableModeManifestJson(jsonText: string, field = 'mode manifest'): void {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(jsonText);
+    } catch (error) {
+        throw new Error(`Invalid ${field}: expected JSON object.`, { cause: error });
+    }
+    const source = readObject(parsed, field);
+    assertAllowedKeys(source, portableModeV2AllowedKeys, field);
+    if (source.version !== 2) {
+        throw new Error(`Invalid ${field}: expected portable mode JSON version 2.`);
+    }
+    const slug = readSlug(source.slug, `${field}.slug`);
+    readString(source.name, `${field}.name`);
+    const authoringRole = readEnum(source.authoringRole, `${field}.authoringRole`, modeAuthoringRoles);
+    const roleTemplate = readString(source.roleTemplate, `${field}.roleTemplate`);
+    const allowedRoleTemplates = modeRoleTemplatesByAuthoringRole[authoringRole] as readonly string[];
+    if (!allowedRoleTemplates.includes(roleTemplate)) {
+        throw new Error(`Invalid ${field}: roleTemplate must match authoringRole "${authoringRole}".`);
+    }
+    readOptionalTrimmedString(source.description, `${field}.description`);
+    readOptionalTrimmedString(source.roleDefinition, `${field}.roleDefinition`);
+    readOptionalTrimmedString(source.customInstructions, `${field}.customInstructions`);
+    readOptionalTrimmedString(source.whenToUse, `${field}.whenToUse`);
+    readPortableModeStringArray(source.tags, `${field}.tags`);
+    validatePromptLayerOverrides(source.promptLayerOverrides, `${field}.promptLayerOverrides`);
+    if (slug.length === 0) {
+        throw new Error(`Invalid ${field}: slug must not be empty.`);
+    }
+}
+
 function readUpstreamSource(value: unknown, field: string): MarketplacePackageUpstreamSource {
     const source = readObject(value, field);
     assertAllowedKeys(source, new Set(['repositoryUrl', 'commitSha', 'relativePath']), field);
@@ -563,6 +680,19 @@ function ensurePathWithinPackage(input: { packageRoot: string; relativePath: str
 
 function validateLicensePolicy(pkg: AuthoredMarketplacePackage): void {
     const license = pkg.compliance.license;
+    if (license.reviewStatus === 'approved_unlicensed') {
+        if (license.spdxExpression !== 'UNLICENSED') {
+            throw new Error(
+                `Invalid "${packageIdentity(pkg.metadata)}": approved_unlicensed packages must use spdxExpression "UNLICENSED".`
+            );
+        }
+        if (!license.notices?.some((notice) => notice.includes(pkg.metadata.source.commitSha))) {
+            throw new Error(
+                `Invalid "${packageIdentity(pkg.metadata)}": approved_unlicensed packages must record the checked upstream commit in notices.`
+            );
+        }
+        return;
+    }
     if (license.reviewStatus === 'approved') {
         const allowed =
             approvedLicenseExpressions.has(license.spdxExpression) ||
@@ -657,6 +787,12 @@ async function validatePackagePaths(
     const entryPath = path.join(rootDir, packageEntryPath(pkg.metadata));
     if (!(await pathExists(entryPath))) {
         throw new Error(`Invalid "${packageIdentity(pkg.metadata)}": entry or manifest file does not exist.`);
+    }
+    if (pkg.metadata.kind === 'mode') {
+        validatePortableModeManifestJson(
+            await readFile(entryPath, 'utf8'),
+            `${packageIdentity(pkg.metadata)} mode manifest`
+        );
     }
     const evidencePath = path.join(rootDir, pkg.compliance.license.evidencePath);
     if (!(await pathExists(evidencePath))) {

@@ -5,54 +5,5 @@
         "repositoryUrl": "https://github.com/NeonTechSpace/MarketPlace-NC",
         "commitSha": "0000000000000000000000000000000000000000"
     },
-    "packages": [
-        {
-            "kind": "mcp",
-            "slug": "github",
-            "version": "1.0.0",
-            "name": "GitHub MCP Server",
-            "summary": "Official GitHub MCP server manifest for repository, issue, pull request, and workflow access.",
-            "description": "Vendored from github/github-mcp-server as an approved first seed MCP entry. The upstream source commit and license evidence are recorded for audit, while NeonConductor installs from this vendored marketplace copy.",
-            "tags": [
-                "github",
-                "mcp",
-                "repositories",
-                "pull-requests"
-            ],
-            "source": {
-                "repositoryUrl": "https://github.com/github/github-mcp-server",
-                "commitSha": "f80ca8555bd5cd89e4b0850505fb6f392413b5a2",
-                "relativePath": "server.json"
-            },
-            "distribution": {
-                "repositoryUrl": "https://github.com/NeonTechSpace/MarketPlace-NC",
-                "commitSha": "0000000000000000000000000000000000000000",
-                "relativePath": "mcps/github",
-                "contentSha256": "68430b633147282696000768f82f528a448f4e8f064fb1c000ba009baffad9ef",
-                "sizeBytes": 2422,
-                "files": [
-                    {
-                        "relativePath": "LICENSE",
-                        "sha256": "9e48ecfa18e2b15169746a3c97beda4d1d6c6796097038498ca434ca7e0ccd44",
-                        "sizeBytes": 1063
-                    },
-                    {
-                        "relativePath": "server.json",
-                        "sha256": "38d2395945342d544b57055e46d5faaae01f51cb4304bbd5182ec60489c33372",
-                        "sizeBytes": 1359
-                    }
-                ]
-            },
-            "compatibility": {
-                "neonVersionRange": ">=0.0.1 <1.0.0",
-                "requiredCapabilities": [
-                    "mcp"
-                ]
-            },
-            "mcp": {
-                "manifestFile": "mcps/github/server.json",
-                "serverLabel": "github"
-            }
-        }
-    ]
+    "packages": []
 }

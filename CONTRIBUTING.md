@@ -1,117 +1,93 @@
-# Contributing
+# Contributing To MarketPlace-NC
 
-This repository publishes NeonConductor marketplace entries after review.
+MarketPlace-NC accepts package intake through small source records first.
+Vendored files are generated or validated output.
+This keeps pull requests readable and prevents whole repositories from becoming install sources.
 
-## Branch Names
+## Branches And Titles
 
-- Package entries: `add-package/<kind>/<slug>-<version>`
-- Tooling: `tool/<name>`
+Use short, scoped branch names.
+Package submissions should use `add-package/<kind>/<slug>-<version>`.
+Tooling changes should use `tool/<short-purpose>`.
+Documentation changes should use `docs/<short-purpose>`.
 
-Examples:
+Pull request titles should use the repository label style.
+Examples are `feat(skill): add repo review package`, `chore(marketplace): refresh upstream package pins`, and `docs(modes): explain portable mode shape`.
 
-- `add-package/skill/repo-review-1.0.0`
-- `add-package/mcp/github-1.0.0`
-- `tool/catalog-validator`
+## Package Intake
 
-Do not create `dev` or `prev` unless a phase explicitly needs those branches.
+Add source-pulled packages to the matching source file under `sources/`.
+Use `sources/skills.v1.json` for skills.
+Use `sources/mcps.v1.json` for MCP packages.
+Use `sources/modes.v1.json` for mode packages.
 
-## PR Titles
+Each source entry must declare the package kind, slug, version, name, summary, source repository, source path, selected files, entry or manifest file, compatibility range, and license evidence.
+Source-pulled packages should use selected raw files only.
+Do not point NeonConductor at upstream repositories as install sources.
+Do not add whole-repository archives.
 
-Use one of:
+Manual vendored uploads are allowed when there is no useful upstream repository or when the package is user-authored.
+Manual uploads still need `marketplace.v1.json`, license review metadata, deterministic hashes, and normal validation.
 
-- `type: short lowercase subject`
-- `type(scope): short lowercase subject`
+## File And Folder Rules
 
-Allowed types:
-
-`build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `test`
-
-Useful marketplace scopes:
-
-`marketplace`, `package-skill`, `package-mcp`, `licensing`, `provenance`, `tools`
-
-## Package Submission Rules
-
-Every package must include:
-
-- vendored package files in this repository
-- source repository URL
-- pinned upstream source commit
-- upstream source-relative path
-- marketplace package path
-- marketplace package version
-- vendored package content SHA-256
-- vendored package byte size
-- generated file manifest in the published catalog
-- SPDX license expression
-- license evidence path
-- license evidence SHA-256
-- review status
-- required notices
+Package roots are `skills/<slug>/`, `mcps/<slug>/`, and `modes/<slug>/`.
+Package slugs use lowercase kebab-case.
+Package metadata is named `marketplace.v1.json`.
+Generated catalogs are kept under `generated/`.
+Source entries are kept under `sources/`.
 
 Do not hand-author `distribution.files` in `marketplace.v1.json`.
-The generator adds the per-file manifest to published catalogs from the vendored package contents so NeonConductor can fetch only selected commit-pinned raw files and verify each file before install.
+The generator adds the per-file manifest to published catalogs from the vendored package contents.
+That manifest lets NeonConductor fetch only selected commit-pinned raw files and verify each file before install.
 
-A commit hash proves provenance, not permission.
-If the pinned commit has no license, the package cannot be published.
-Ask upstream for a licensed commit, record explicit written permission, or reimplement the idea without copying protected content.
+Keep package files focused and inspectable.
+Avoid vendoring generated dependency trees, binaries, screenshots, large examples, and unrelated upstream repository content.
+If file size or file count makes review hard, the package should be narrowed before it is accepted.
 
-Permissive SPDX/OSI licenses such as `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, and `0BSD` can pass automatically when evidence matches.
-Other licenses require maintainer review before publication.
+## License Evidence
 
-## Skills And MCPs
+Permissive SPDX licenses need a license evidence file and a matching SHA-256.
+The accepted code-license baseline is MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, and 0BSD.
+CC0-1.0 may be accepted for non-code material.
+Restricted, unclear, or mismatched license evidence blocks publication.
 
-Skills and MCPs are eligible for package submissions during Phase 18B when their vendored files and license evidence validate.
-
-`skills.sh`, GitHub starred repositories, and GitHub search may be used as candidate discovery sources.
-They are not trust authorities.
-A package is accepted only after source, license, path, and hash validation passes.
+Unlicensed upstream packages are allowed only with explicit `UNLICENSED` metadata.
+The review status must be `approved_unlicensed`.
+The source entry and package metadata must record the pinned upstream commit that was checked.
+The evidence file should explain where license discovery looked and that no license file was present at that commit.
 
 ## Modes
 
-Mode packages are deferred until NeonConductor first alpha is finished.
+Mode packages must use NeonConductor portable mode JSON v2.
+Valid authoring roles are `chat`, `single_task_agent`, `orchestrator_primary`, and `orchestrator_worker_agent`.
+The role template must match the selected authoring role.
+Mode packages enter NeonConductor as drafts for review.
+They do not directly activate modes.
 
-A future marketplace-ready mode should include:
-
-- clear operator purpose
-- prompt and behavior boundaries
-- expected model and tool capabilities
-- activation assumptions
-- safety and permission posture
-- compatibility range
-- examples and validation expectations
+Real mode publication still needs explicit approval.
+Until then, mode fixtures should stay in tests and not in production package directories.
 
 ## Validation
 
-Run:
+Run the full check before opening a pull request:
 
 ```powershell
 pnpm run check
 ```
 
-Do not add GitHub Releases or GitHub Packages for package artifacts in Phase 18B.
-GitHub Pages is used for generated catalog publication.
+Use source sync when changing source entries:
 
-## Upstream Updates
+```powershell
+pnpm run source:sync
+pnpm run generate
+```
 
-Approved package updates are PR-only.
-The update monitor reads `tools/upstream-monitor.v1.json`, checks configured upstream refs, and re-vendors only configured raw files from a resolved commit.
-It must not download full repository archives.
-It must not update unconfigured package paths.
-It must not update modes before NeonConductor first alpha is finished.
+Use upstream monitoring only for configured source-pulled skill and MCP packages.
+The monitor creates pull requests for review.
+It does not auto-merge, publish directly, update mode packages, or bypass validation.
 
-Update PRs must include the old and new upstream commits, changed files, license evidence status, and any risk flags.
-The generated PR still needs normal package, license, provenance, and catalog validation.
-Human review is required before any update reaches `main`.
+## AI Assistance
 
-## AI Assistance Disclosure
-
-If AI was used, disclose where it was used:
-
-- research
-- planning
-- code or metadata edits
-- validation/debugging
-
-Do not submit unreviewed AI output.
-The contributor is responsible for the final content, package metadata, license evidence, and validation results.
+AI assistance is allowed.
+The contributor remains responsible for source selection, license evidence, provenance, validation, and review accuracy.
