@@ -1,0 +1,56 @@
+name: Upstream package update monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+concurrency:
+  group: upstream-package-update-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          version: 11.1.2
+
+      - name: Setup Node
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Monitor upstream packages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm run upstream:update -- --report .marketplace-upstream-report.md
+
+      - name: Check
+        run: pnpm run check
+
+      - name: Create update pull request
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676
+        with:
+          branch: automation/upstream-package-updates
+          delete-branch: true
+          title: "chore(marketplace): refresh upstream package pins"
+          body-path: .marketplace-upstream-report.md
+          commit-message: "chore(marketplace): refresh upstream package pins"
+          labels: "scope: marketplace,type: package-submission,type: provenance"

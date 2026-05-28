@@ -16,6 +16,8 @@
         "generate": "tsx tools/generate-catalogs.ts",
         "package": "tsx tools/package-assets.ts",
         "pages": "tsx tools/prepare-pages.ts",
+        "upstream:check": "tsx tools/monitor-upstream-updates.ts --check",
+        "upstream:update": "tsx tools/monitor-upstream-updates.ts",
         "check": "pnpm run typecheck && pnpm run test && pnpm run validate && pnpm run generate -- --check && pnpm run package -- --check && pnpm run pages && pnpm run pages -- --check"
     },
     "dependencies": {

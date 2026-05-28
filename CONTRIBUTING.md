@@ -92,6 +92,18 @@ pnpm run check
 Do not add GitHub Releases or GitHub Packages for package artifacts in Phase 18B.
 GitHub Pages is used for generated catalog publication.
 
+## Upstream Updates
+
+Approved package updates are PR-only.
+The update monitor reads `tools/upstream-monitor.v1.json`, checks configured upstream refs, and re-vendors only configured raw files from a resolved commit.
+It must not download full repository archives.
+It must not update unconfigured package paths.
+It must not update modes before NeonConductor first alpha is finished.
+
+Update PRs must include the old and new upstream commits, changed files, license evidence status, and any risk flags.
+The generated PR still needs normal package, license, provenance, and catalog validation.
+Human review is required before any update reaches `main`.
+
 ## AI Assistance Disclosure
 
 If AI was used, disclose where it was used:

@@ -1,0 +1,77 @@
+{
+    "schemaVersion": 1,
+    "packages": [
+        {
+            "kind": "skill",
+            "slug": "enhance-prompt",
+            "upstreamRepositoryUrl": "https://github.com/google-labs-code/stitch-skills",
+            "upstreamRef": "main",
+            "pinnedCommitSha": "53f15d81da854039aae10e8af19ad389c3997653",
+            "sourceRoot": "plugins/stitch-utilities/skills/enhance-prompt",
+            "packageRoot": "skills/enhance-prompt",
+            "files": [
+                {
+                    "upstreamPath": "plugins/stitch-utilities/skills/enhance-prompt/SKILL.md",
+                    "packagePath": "SKILL.md"
+                },
+                {
+                    "upstreamPath": "plugins/stitch-utilities/skills/enhance-prompt/README.md",
+                    "packagePath": "README.md"
+                },
+                {
+                    "upstreamPath": "plugins/stitch-utilities/skills/enhance-prompt/references/KEYWORDS.md",
+                    "packagePath": "references/KEYWORDS.md"
+                }
+            ],
+            "license": {
+                "upstreamPath": "LICENSE",
+                "packagePath": "LICENSE",
+                "spdxExpression": "Apache-2.0"
+            }
+        },
+        {
+            "kind": "skill",
+            "slug": "taste-design",
+            "upstreamRepositoryUrl": "https://github.com/google-labs-code/stitch-skills",
+            "upstreamRef": "main",
+            "pinnedCommitSha": "53f15d81da854039aae10e8af19ad389c3997653",
+            "sourceRoot": "plugins/stitch-utilities/skills/taste-design",
+            "packageRoot": "skills/taste-design",
+            "files": [
+                {
+                    "upstreamPath": "plugins/stitch-utilities/skills/taste-design/SKILL.md",
+                    "packagePath": "SKILL.md"
+                },
+                {
+                    "upstreamPath": "plugins/stitch-utilities/skills/taste-design/resources/DESIGN.md",
+                    "packagePath": "resources/DESIGN.md"
+                }
+            ],
+            "license": {
+                "upstreamPath": "LICENSE",
+                "packagePath": "LICENSE",
+                "spdxExpression": "Apache-2.0"
+            }
+        },
+        {
+            "kind": "mcp",
+            "slug": "github",
+            "upstreamRepositoryUrl": "https://github.com/github/github-mcp-server",
+            "upstreamRef": "main",
+            "pinnedCommitSha": "f80ca8555bd5cd89e4b0850505fb6f392413b5a2",
+            "sourceRoot": "server.json",
+            "packageRoot": "mcps/github",
+            "files": [
+                {
+                    "upstreamPath": "server.json",
+                    "packagePath": "server.json"
+                }
+            ],
+            "license": {
+                "upstreamPath": "LICENSE",
+                "packagePath": "LICENSE",
+                "spdxExpression": "MIT"
+            }
+        }
+    ]
+}

@@ -48,3 +48,26 @@ Authors do not maintain this list by hand.
 Phase 18B enables GitHub Pages catalog publication.
 GitHub Releases and GitHub Packages are not used for package artifacts in this slice.
 Package installation should verify the catalog commit, package path, per-file manifest entries, vendored content SHA-256, and size before trusting local package files.
+
+## Upstream Update Monitoring
+
+Phase 18G adds PR-only upstream update monitoring for vendored skill and MCP packages.
+The monitor reads `tools/upstream-monitor.v1.json`, resolves configured upstream refs, compares them to pinned source commits, and fetches only configured raw files from the resolved commit.
+It does not download repository archives.
+It does not update packages that are not listed in the monitor config.
+It does not update mode packages.
+
+Run a dry check with:
+
+```powershell
+pnpm run upstream:check
+```
+
+Run a local update with:
+
+```powershell
+pnpm run upstream:update
+```
+
+The scheduled GitHub workflow creates a pull request when package files, hashes, license evidence, or generated catalogs change.
+It does not auto-merge, publish directly, create Releases, create Packages, or bypass normal validation.

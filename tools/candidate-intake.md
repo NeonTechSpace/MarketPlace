@@ -23,7 +23,14 @@ Candidates deferred or blocked:
 
 Future update pipeline:
 
-- Check upstream configured refs on a schedule or manual dispatch.
-- Create PRs only.
-- Re-vendor changed files, recompute content hashes, rerun license checks, and include risk flags.
-- Block updates when license evidence disappears, source paths move unexpectedly, package shape changes, or hashes cannot be reproduced.
+- Phase 18G implements PR-only upstream update monitoring.
+- The monitor reads `tools/upstream-monitor.v1.json`.
+- It checks configured upstream refs on a schedule or manual dispatch.
+- It fetches only configured raw files from the resolved upstream commit.
+- It does not download repository archives.
+- It does not update packages that are not listed in the monitor config.
+- It re-vendors changed files, recomputes content hashes, reruns license checks, regenerates catalogs, and includes risk flags.
+- It blocks updates when license evidence disappears, source paths move unexpectedly, package shape changes, configured files are missing, or hashes cannot be reproduced.
+- It does not update modes before NeonConductor first alpha is finished.
+- It creates PRs only.
+- Human review is required before any update reaches `main`.

@@ -1,6 +1,7 @@
 node_modules/
 .marketplace-artifacts/
 .marketplace-pages/
+.marketplace-upstream-report.md
 coverage/
 dist/
 *.tsbuildinfo
