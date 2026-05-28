@@ -640,7 +640,7 @@ async function collectMarketplaceFiles(rootDir: string): Promise<string[]> {
         }
         return results;
     }
-    const roots = ['skills', 'modes', 'mcps'];
+    const roots = ['distribution/skills', 'distribution/modes', 'distribution/mcps'];
     const files: string[] = [];
     for (const root of roots) {
         const rootPath = path.join(rootDir, root);
@@ -653,12 +653,12 @@ async function collectMarketplaceFiles(rootDir: string): Promise<string[]> {
 
 function expectedKindFolder(kind: PackageKind): string {
     if (kind === 'skill') {
-        return 'skills';
+        return 'distribution/skills';
     }
     if (kind === 'mode') {
-        return 'modes';
+        return 'distribution/modes';
     }
-    return 'mcps';
+    return 'distribution/mcps';
 }
 
 function packageEntryPath(metadata: MarketplacePackageMetadata): string {

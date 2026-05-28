@@ -377,7 +377,7 @@ export function parseSourceIntakeCatalog(json: unknown): SourceIntakeCatalog {
 }
 
 function kindRoot(kind: PackageKind): string {
-    return kind === 'skill' ? 'skills' : kind === 'mode' ? 'modes' : 'mcps';
+    return kind === 'skill' ? 'distribution/skills' : kind === 'mode' ? 'distribution/modes' : 'distribution/mcps';
 }
 
 function packageRootRelativePath(pkg: SourceIntakePackage): string {

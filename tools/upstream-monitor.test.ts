@@ -25,9 +25,9 @@ const newCommitSha = 'abcdef0123456789abcdef0123456789abcdef01';
 async function withTempMarketplace<T>(fn: (rootDir: string) => Promise<T>): Promise<T> {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'neon-marketplace-upstream-'));
     try {
-        await mkdir(path.join(rootDir, 'skills'), { recursive: true });
-        await mkdir(path.join(rootDir, 'modes'), { recursive: true });
-        await mkdir(path.join(rootDir, 'mcps'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'skills'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'modes'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'mcps'), { recursive: true });
         return await fn(rootDir);
     } finally {
         await rm(rootDir, { recursive: true, force: true });
@@ -35,7 +35,7 @@ async function withTempMarketplace<T>(fn: (rootDir: string) => Promise<T>): Prom
 }
 
 function kindRoot(kind: PackageKind): string {
-    return kind === 'skill' ? 'skills' : kind === 'mcp' ? 'mcps' : 'modes';
+    return kind === 'skill' ? 'distribution/skills' : kind === 'mcp' ? 'distribution/mcps' : 'distribution/modes';
 }
 
 function entryName(kind: PackageKind): string {
@@ -197,7 +197,7 @@ describe('upstream update monitor', () => {
                     changedFiles: [],
                 })
             );
-            await expect(readFile(path.join(rootDir, 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
+            await expect(readFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
                 'skill old content\n'
             );
         });
@@ -221,16 +221,16 @@ describe('upstream update monitor', () => {
                 expect.objectContaining({
                     status: 'updated',
                     changedFiles: expect.arrayContaining([
-                        'skills/repo-review/SKILL.md',
-                        'skills/repo-review/marketplace.v1.json',
+                        'distribution/skills/repo-review/SKILL.md',
+                        'distribution/skills/repo-review/marketplace.v1.json',
                     ]),
                 })
             );
-            await expect(readFile(path.join(rootDir, 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
+            await expect(readFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
                 'skill new content\n'
             );
             const metadata = JSON.parse(
-                await readFile(path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json'), 'utf8')
+                await readFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'marketplace.v1.json'), 'utf8')
             ) as { metadata: { source: { commitSha: string } } };
             expect(metadata.metadata.source.commitSha).toBe(newCommitSha);
             await expect(validateMarketplace(rootDir)).resolves.toBeTruthy();
@@ -250,7 +250,7 @@ describe('upstream update monitor', () => {
             });
 
             expect(result.packages[0]?.status).toBe('updated');
-            const metadata = JSON.parse(await readFile(path.join(rootDir, 'mcps', 'github', 'marketplace.v1.json'), 'utf8')) as {
+            const metadata = JSON.parse(await readFile(path.join(rootDir, 'distribution', 'mcps', 'github', 'marketplace.v1.json'), 'utf8')) as {
                 metadata: { kind: string; mcp: { serverLabel: string } };
             };
             expect(metadata.metadata.kind).toBe('mcp');
@@ -272,7 +272,7 @@ describe('upstream update monitor', () => {
 
             expect(result.packages[0]?.status).toBe('blocked');
             expect(result.packages[0]?.riskFlags[0]).toMatch(/HTTP 404/u);
-            await expect(readFile(path.join(rootDir, 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
+            await expect(readFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'SKILL.md'), 'utf8')).resolves.toBe(
                 'skill old content\n'
             );
         });

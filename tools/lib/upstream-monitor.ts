@@ -66,7 +66,7 @@ function sourcePackageToMonitorPackage(pkg: SourceIntakePackage): UpstreamMonito
         upstreamRef: pkg.source.commitSha,
         pinnedCommitSha: pkg.source.commitSha,
         sourceRoot: pkg.source.relativePath,
-        packageRoot: `${pkg.kind === 'skill' ? 'skills' : 'mcps'}/${pkg.slug}`,
+        packageRoot: `${pkg.kind === 'skill' ? 'distribution/skills' : 'distribution/mcps'}/${pkg.slug}`,
         files: pkg.files.filter((file) => file.packagePath !== pkg.license.evidenceFile),
         license: {
             upstreamPath: licenseFile.upstreamPath,
@@ -382,6 +382,7 @@ function updateNotices(input: {
 }
 
 function assertMonitorMatchesAuthored(input: {
+    rootDir: string;
     monitor: UpstreamMonitorPackage;
     authored: AuthoredMarketplacePackage;
 }): void {
@@ -398,7 +399,7 @@ function assertMonitorMatchesAuthored(input: {
     if (metadata.source.relativePath !== input.monitor.sourceRoot) {
         throw new Error(`Invalid monitor config for ${input.monitor.kind}:${input.monitor.slug}: source root mismatch.`);
     }
-    const packageRoot = normalizePathSeparators(path.relative(path.dirname(path.dirname(input.authored.packageRoot)), input.authored.packageRoot));
+    const packageRoot = normalizePathSeparators(path.relative(input.rootDir, input.authored.packageRoot));
     if (metadata.distribution.relativePath !== input.monitor.packageRoot || metadata.distribution.relativePath !== packageRoot) {
         throw new Error(`Invalid monitor config for ${input.monitor.kind}:${input.monitor.slug}: package root mismatch.`);
     }
@@ -528,7 +529,7 @@ async function runPackageMonitor(input: {
         };
     }
     try {
-        assertMonitorMatchesAuthored({ monitor: input.monitor, authored });
+        assertMonitorMatchesAuthored({ rootDir: input.rootDir, monitor: input.monitor, authored });
         const newCommitSha = await resolveUpstreamCommit({
             fetchImpl: input.fetchImpl,
             packageConfig: input.monitor,

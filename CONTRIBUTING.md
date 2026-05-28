@@ -53,9 +53,9 @@ Manual packages still need license evidence, deterministic hashes, and normal va
 
 Package roots:
 
-- `skills/<slug>/`
-- `mcps/<slug>/`
-- `modes/<slug>/`
+- `distribution/skills/<slug>/`
+- `distribution/mcps/<slug>/`
+- `distribution/modes/<slug>/`
 
 Names:
 
@@ -68,6 +68,7 @@ Names:
 Generated catalogs are CI output.
 Local `generated/` files are ignored.
 Do not hand-author `distribution.files`.
+Keep `.gitkeep` files in empty distribution family folders.
 
 ## Size Rules
 

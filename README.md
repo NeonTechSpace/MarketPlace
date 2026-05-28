@@ -8,7 +8,7 @@ GitHub Pages hosts generated catalog JSON.
 ## Quick Model
 
 - Write small source records in `sources/*.v1.json`.
-- Sync selected upstream raw files into `skills/`, `mcps/`, or `modes/`.
+- Sync selected upstream raw files into `distribution/skills/`, `distribution/mcps/`, or `distribution/modes/`.
 - Validate vendored files, license evidence, hashes, and package shape.
 - Generate catalogs in CI.
 - Publish only `catalog/v1/*.json` through GitHub Pages.
@@ -38,11 +38,11 @@ Use `pnpm run source:check` to validate source records without writing files.
 
 ## Vendored Packages
 
-Vendored package files live here:
+Vendored package files live under `distribution/`.
 
-- `skills/<slug>/`
-- `mcps/<slug>/`
-- `modes/<slug>/`
+- `distribution/skills/<slug>/`
+- `distribution/mcps/<slug>/`
+- `distribution/modes/<slug>/`
 
 Each package directory contains `marketplace.v1.json`.
 For source-pulled packages, that file is generated metadata.
@@ -53,6 +53,9 @@ Normal file names:
 - skills: `SKILL.md`
 - MCPs: `server.json`
 - modes: `mode.json`
+
+The `.gitkeep` files keep the empty family folders visible.
+They can stay in the repo.
 
 Keep packages small and inspectable.
 Do not copy whole repositories.

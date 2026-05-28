@@ -44,9 +44,9 @@ interface FixturePackageInput {
 async function withTempMarketplace<T>(fn: (rootDir: string) => Promise<T>): Promise<T> {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'neon-marketplace-'));
     try {
-        await mkdir(path.join(rootDir, 'skills'), { recursive: true });
-        await mkdir(path.join(rootDir, 'modes'), { recursive: true });
-        await mkdir(path.join(rootDir, 'mcps'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'skills'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'modes'), { recursive: true });
+        await mkdir(path.join(rootDir, 'distribution', 'mcps'), { recursive: true });
         return await fn(rootDir);
     } finally {
         await rm(rootDir, { recursive: true, force: true });
@@ -55,12 +55,12 @@ async function withTempMarketplace<T>(fn: (rootDir: string) => Promise<T>): Prom
 
 function kindRoot(kind: PackageKind): string {
     if (kind === 'skill') {
-        return 'skills';
+        return 'distribution/skills';
     }
     if (kind === 'mode') {
-        return 'modes';
+        return 'distribution/modes';
     }
-    return 'mcps';
+    return 'distribution/mcps';
 }
 
 function entryFileName(kind: PackageKind): string {
@@ -215,12 +215,12 @@ describe('marketplace validation', () => {
     it('generates deterministic package file manifests for selected-file installs', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
-            await writeFile(path.join(rootDir, 'skills', 'repo-review', 'references.md'), 'reference\n', 'utf8');
-            const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
+            await writeFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'references.md'), 'reference\n', 'utf8');
+            const metadataPath = path.join(rootDir, 'distribution', 'skills', 'repo-review', 'marketplace.v1.json');
             const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
                 metadata: { distribution: { contentSha256: string; sizeBytes: number } };
             };
-            const digest = await hashVendoredPackageDirectory(path.join(rootDir, 'skills', 'repo-review'));
+            const digest = await hashVendoredPackageDirectory(path.join(rootDir, 'distribution', 'skills', 'repo-review'));
             authored.metadata.distribution.contentSha256 = digest.sha256;
             authored.metadata.distribution.sizeBytes = digest.sizeBytes;
             await writeFile(metadataPath, `${JSON.stringify(authored, null, 4)}\n`, 'utf8');
@@ -282,7 +282,7 @@ describe('marketplace validation', () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review-copy' });
-            const copyMetadataPath = path.join(rootDir, 'skills', 'repo-review-copy', 'marketplace.v1.json');
+            const copyMetadataPath = path.join(rootDir, 'distribution', 'skills', 'repo-review-copy', 'marketplace.v1.json');
             const copy = JSON.parse(await readFile(copyMetadataPath, 'utf8')) as { metadata: { slug: string } };
             copy.metadata.slug = 'repo-review';
             await writeFile(copyMetadataPath, `${JSON.stringify(copy, null, 4)}\n`, 'utf8');
@@ -296,7 +296,7 @@ describe('marketplace validation', () => {
             await addPackage(rootDir, {
                 kind: 'skill',
                 slug: 'repo-review',
-                entryRelativePath: 'skills/repo-review/missing.md',
+                entryRelativePath: 'distribution/skills/repo-review/missing.md',
                 writeEntry: false,
             });
 
@@ -319,7 +319,7 @@ describe('marketplace validation', () => {
     it('rejects invalid content SHA and compatibility ranges', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
-            const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
+            const metadataPath = path.join(rootDir, 'distribution', 'skills', 'repo-review', 'marketplace.v1.json');
             const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
                 metadata: { distribution: { contentSha256: string }; compatibility: { neonVersionRange: string } };
             };
@@ -357,7 +357,7 @@ describe('marketplace validation', () => {
                 reviewStatus: 'approved_unlicensed',
                 spdxExpression: 'UNLICENSED',
             });
-            const metadataPath = path.join(rootDir, 'skills', 'repo-review', 'marketplace.v1.json');
+            const metadataPath = path.join(rootDir, 'distribution', 'skills', 'repo-review', 'marketplace.v1.json');
             const authored = JSON.parse(await readFile(metadataPath, 'utf8')) as {
                 metadata: { source: { commitSha: string } };
                 compliance: { license: { notices: string[] } };
@@ -403,7 +403,7 @@ describe('marketplace validation', () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'mode', slug: 'focused-implementer' });
             await writeFile(
-                path.join(rootDir, 'modes', 'focused-implementer', 'mode.json'),
+                path.join(rootDir, 'distribution', 'modes', 'focused-implementer', 'mode.json'),
                 modeManifest({ authoringRole: 'orchestrator_primary', roleTemplate: 'single_task_agent/apply' }),
                 'utf8'
             );
@@ -434,7 +434,7 @@ describe('marketplace validation', () => {
     it('rejects modified vendored content without updated hash metadata', async () => {
         await withTempMarketplace(async (rootDir) => {
             await addPackage(rootDir, { kind: 'skill', slug: 'repo-review' });
-            await writeFile(path.join(rootDir, 'skills', 'repo-review', 'extra.md'), 'changed\n', 'utf8');
+            await writeFile(path.join(rootDir, 'distribution', 'skills', 'repo-review', 'extra.md'), 'changed\n', 'utf8');
 
             await expect(validateMarketplace(rootDir)).rejects.toThrow(/content SHA-256/u);
         });
@@ -525,7 +525,7 @@ describe('source intake', () => {
                 kind: 'skill',
                 slug: 'repo-review',
                 source: { commitSha: '0123456789abcdef0123456789abcdef01234567' },
-                skill: { entryFile: 'skills/repo-review/SKILL.md' },
+                skill: { entryFile: 'distribution/skills/repo-review/SKILL.md' },
             });
         });
     });
