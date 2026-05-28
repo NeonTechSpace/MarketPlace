@@ -98,6 +98,13 @@ Supported authoring roles:
 - `orchestrator_primary`
 - `orchestrator_worker_agent`
 
+Role meanings:
+
+- `chat` is for normal conversation modes.
+- `single_task_agent` is for user-selected agent modes such as ask, plan, apply, debug, research, and review.
+- `orchestrator_primary` is the user-facing orchestrator role that plans, coordinates, delegates, debugs, or synthesizes work.
+- `orchestrator_worker_agent` is a delegated worker role used by orchestration and should not be presented as a normal selectable top-level mode.
+
 The role template must match the authoring role.
 The validator rejects portable mode v1, unknown fields, bad role/template pairs, and malformed prompt overrides.
 

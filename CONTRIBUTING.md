@@ -105,6 +105,15 @@ The authoring role must match the role template.
 Marketplace mode imports become NeonConductor drafts.
 Marketplace mode imports do not activate modes.
 
+Use `chat` for normal conversation modes.
+Use `single_task_agent` for user-selected agent modes.
+Use `orchestrator_primary` for the user-facing orchestrator role.
+Use `orchestrator_worker_agent` only for delegated orchestration workers.
+
+An `orchestrator_primary` mode is something the operator can review as an Orchestrator-surface mode.
+An `orchestrator_worker_agent` mode is a worker shape the orchestrator can delegate to.
+Worker modes should not be described as normal top-level modes.
+
 Keep real mode packages out of production directories until explicitly approved.
 
 ## Update Monitor
