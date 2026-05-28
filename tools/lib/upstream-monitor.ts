@@ -52,7 +52,7 @@ export interface UpstreamMonitorLicenseMapping {
 }
 
 function sourcePackageToMonitorPackage(pkg: SourceIntakePackage): UpstreamMonitorPackage | undefined {
-    if (pkg.intake !== 'source_pull' || pkg.kind === 'mode' || !pkg.source.commitSha) {
+    if (pkg.intake !== 'source_pull' || pkg.kind === 'mode') {
         return undefined;
     }
     const licenseFile = pkg.files.find((file) => file.packagePath === pkg.license.evidenceFile);
@@ -63,7 +63,7 @@ function sourcePackageToMonitorPackage(pkg: SourceIntakePackage): UpstreamMonito
         kind: pkg.kind,
         slug: pkg.slug,
         upstreamRepositoryUrl: pkg.source.repositoryUrl,
-        upstreamRef: pkg.source.ref ?? pkg.source.commitSha,
+        upstreamRef: pkg.source.commitSha,
         pinnedCommitSha: pkg.source.commitSha,
         sourceRoot: pkg.source.relativePath,
         packageRoot: `${pkg.kind === 'skill' ? 'skills' : 'mcps'}/${pkg.slug}`,

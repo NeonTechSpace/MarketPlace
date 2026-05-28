@@ -30,7 +30,7 @@ A source entry must include:
 
 - kind, slug, version, name, and summary
 - upstream repository and source path
-- upstream ref or commit
+- upstream commit SHA
 - selected files
 - entry file or manifest file
 - Neon compatibility range
@@ -111,6 +111,7 @@ Keep real mode packages out of production directories until explicitly approved.
 
 The upstream monitor is PR-only.
 It applies to configured source-pulled skill and MCP packages.
+Future monitor configuration may track moving upstream refs, but package source records must stay pinned to commit SHAs.
 It does not update mode packages.
 It does not auto-merge.
 It does not publish directly.

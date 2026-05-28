@@ -488,7 +488,7 @@ describe('source intake', () => {
                         summary: 'Review repository changes.',
                         source: {
                             repositoryUrl: 'https://github.com/example/source',
-                            ref: 'main',
+                            commitSha: '0123456789abcdef0123456789abcdef01234567',
                             relativePath: 'skills/repo-review',
                         },
                         compatibility: {
@@ -590,6 +590,38 @@ describe('source intake', () => {
                 ],
             })
         ).toThrow(/UNLICENSED/u);
+    });
+
+    it('requires source package truth to use an upstream commit SHA', () => {
+        expect(() =>
+            parseSourceIntakeCatalog({
+                schemaVersion: 1,
+                kind: 'skill',
+                packages: [
+                    {
+                        intake: 'source_pull',
+                        kind: 'skill',
+                        slug: 'repo-review',
+                        version: '1.0.0',
+                        name: 'Repo Review',
+                        summary: 'Review repository changes.',
+                        source: {
+                            repositoryUrl: 'https://github.com/example/source',
+                            ref: 'main',
+                            relativePath: 'skills/repo-review',
+                        },
+                        compatibility: { neonVersionRange: '>=0.0.1 <1.0.0' },
+                        license: {
+                            spdxExpression: 'MIT',
+                            evidenceFile: 'LICENSE',
+                            reviewStatus: 'approved',
+                        },
+                        files: [{ upstreamPath: 'SKILL.md', packagePath: 'SKILL.md' }],
+                        skill: { entryFile: 'SKILL.md' },
+                    },
+                ],
+            })
+        ).toThrow(/unexpected field|commitSha/u);
     });
 
     it('validates checked-in source catalog files', async () => {

@@ -27,7 +27,7 @@ Use these files as the normal package request surface:
 Each source record says:
 
 - package kind, slug, version, name, and summary
-- upstream repository, ref or commit, and source path
+- upstream repository, commit SHA, and source path
 - selected upstream files to copy
 - entry file or manifest file
 - Neon compatibility range
@@ -77,7 +77,7 @@ The full catalog is for browsing, audits, and tooling.
 
 ## Install Safety
 
-`source.commitSha` is the upstream commit that was reviewed or fetched.
+`source.commitSha` is the required upstream commit that was reviewed or fetched.
 `distribution.commitSha` is the MarketPlace-NC commit NeonConductor installs from.
 
 Catalog entries include `distribution.files`.

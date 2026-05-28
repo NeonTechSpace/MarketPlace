@@ -25,30 +25,6 @@ async function readResponseBytes(response: Response, label: string): Promise<Uin
     return new Uint8Array(await response.arrayBuffer());
 }
 
-async function resolveCommitSha(pkg: SourceIntakePackage): Promise<string> {
-    if (pkg.source.commitSha) {
-        return pkg.source.commitSha;
-    }
-    const { owner, repo } = parseGitHubRepositoryUrl(pkg.source.repositoryUrl);
-    const ref = pkg.source.ref;
-    if (!ref) {
-        throw new Error(`Invalid source package "${pkg.kind}:${pkg.slug}": expected ref or commitSha.`);
-    }
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`, {
-        headers: {
-            accept: 'application/vnd.github+json',
-        },
-    });
-    if (!response.ok) {
-        throw new Error(`Failed to resolve ${pkg.kind}:${pkg.slug} ref "${ref}": HTTP ${String(response.status)}.`);
-    }
-    const body = (await response.json()) as { sha?: unknown };
-    if (typeof body.sha !== 'string') {
-        throw new Error(`Failed to resolve ${pkg.kind}:${pkg.slug} ref "${ref}": missing commit SHA.`);
-    }
-    return body.sha;
-}
-
 async function fetchSourceFiles(pkg: SourceIntakePackage, commitSha: string) {
     const { owner, repo } = parseGitHubRepositoryUrl(pkg.source.repositoryUrl);
     return Promise.all(
@@ -77,13 +53,12 @@ async function main(): Promise<void> {
             if (check) {
                 continue;
             }
-            const commitSha = await resolveCommitSha(pkg);
             await materializeSourceIntakePackage({
                 rootDir: process.cwd(),
                 catalogKind: catalog.kind,
                 sourcePackage: pkg,
-                resolvedCommitSha: commitSha,
-                files: await fetchSourceFiles(pkg, commitSha),
+                resolvedCommitSha: pkg.source.commitSha,
+                files: await fetchSourceFiles(pkg, pkg.source.commitSha),
             });
         }
     }

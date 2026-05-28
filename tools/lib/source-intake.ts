@@ -27,8 +27,7 @@ export interface SourceIntakeFileMapping {
 
 export interface SourceIntakeSource {
     repositoryUrl: string;
-    ref?: string;
-    commitSha?: string;
+    commitSha: string;
     relativePath: string;
 }
 
@@ -222,16 +221,10 @@ function readSlug(value: unknown, field: string): string {
 
 function readSource(value: unknown, field: string): SourceIntakeSource {
     const source = readObject(value, field);
-    assertAllowedKeys(source, new Set(['repositoryUrl', 'ref', 'commitSha', 'relativePath']), field);
-    const commitSha = source.commitSha === undefined ? undefined : readCommitSha(source.commitSha, `${field}.commitSha`);
-    const ref = readOptionalString(source.ref, `${field}.ref`);
-    if (!commitSha && !ref) {
-        throw new Error(`Invalid "${field}": expected ref or commitSha.`);
-    }
+    assertAllowedKeys(source, new Set(['repositoryUrl', 'commitSha', 'relativePath']), field);
     return {
         repositoryUrl: readHttpsUrl(source.repositoryUrl, `${field}.repositoryUrl`),
-        ...(ref ? { ref } : {}),
-        ...(commitSha ? { commitSha } : {}),
+        commitSha: readCommitSha(source.commitSha, `${field}.commitSha`),
         relativePath: readRelativePath(source.relativePath, `${field}.relativePath`),
     };
 }
